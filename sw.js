@@ -1,4 +1,4 @@
-const CACHE = "catchup-recipes-v1";
+const CACHE = "catchup-recipes-v2";
 const ASSETS = [
   "./",
   "./index.html",
