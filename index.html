@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#EFE4D2">
+<title>สูตร — Catch Up</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chonburi&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---- Light warm (default): flour-cream paper, espresso ink, ember accent ---- */
+    --bg:#EFE4D2;
+    --bg-2:#E6D8C0;
+    --surface:#FBF5EA;
+    --surface-2:#F1E7D6;
+    --ink:#2E2014;
+    --muted:#7A6A55;
+    --faint:#9C8B73;
+    --ember:#D6822E;
+    --ember-deep:#A85A1E;
+    --line:rgba(46,32,20,0.10);
+    --line-strong:rgba(46,32,20,0.17);
+    --danger:#BE5435;
+    --radius:14px;
+    --pad:18px;
+    --shadow:0 8px 28px rgba(60,40,20,0.14);
+    --sans:'IBM Plex Sans Thai',system-ui,sans-serif;
+    --mono:'JetBrains Mono','IBM Plex Sans Thai',monospace;
+    --display:'Chonburi',serif;
+  }
+  :root[data-theme="dark"]{
+    /* ---- Midnight oven: warm espresso dark ---- */
+    --bg:#231A14;
+    --bg-2:#2B2018;
+    --surface:#332619;
+    --surface-2:#3D2E20;
+    --ink:#F6ECDC;
+    --muted:#C2B097;
+    --faint:#8A7660;
+    --ember:#F2A94E;
+    --ember-deep:#CE7A33;
+    --line:rgba(246,236,220,0.10);
+    --line-strong:rgba(246,236,220,0.18);
+    --danger:#E08056;
+    --shadow:0 8px 28px rgba(0,0,0,0.40);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-weight:400;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  input,textarea{font-family:inherit;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  ::selection{background:var(--ember);color:#181513;}
+
+  /* ---- App shell ---- */
+  .app{max-width:560px;margin:0 auto;min-height:100vh;position:relative;}
+
+  /* ---- Header ---- */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(var(--bg) 80%,transparent);
+    padding:calc(env(safe-area-inset-top) + 16px) var(--pad) 6px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .mark{
+    width:30px;height:30px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 35% 30%,var(--ember),var(--ember-deep) 70%,#7a3f17);
+    box-shadow:0 0 16px rgba(240,162,60,0.35);
+  }
+  .wordmark{font-family:var(--display);font-size:25px;line-height:1;color:var(--ink);letter-spacing:.5px;}
+  .eyebrow{
+    font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.01em;
+    color:var(--muted);margin-top:4px;
+  }
+  .header-actions{margin-left:auto;display:flex;gap:6px;}
+  .icon-btn{
+    width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+    color:var(--muted);background:var(--surface);border:1px solid var(--line);
+    transition:color .15s,border-color .15s;
+  }
+  .icon-btn:hover,.icon-btn:active{color:var(--ember);border-color:var(--line-strong);}
+  .icon-btn svg{width:19px;height:19px;}
+
+  /* ---- Search + filters ---- */
+  .controls{padding:10px var(--pad) 4px;}
+  .search{
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;padding:11px 14px;transition:border-color .15s;
+  }
+  .search:focus-within{border-color:var(--ember-deep);}
+  .search svg{width:18px;height:18px;color:var(--faint);flex:none;}
+  .search input{
+    flex:1;background:none;border:none;outline:none;color:var(--ink);font-size:16px;
+  }
+  .search input::placeholder{color:var(--faint);}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:14px var(--pad) 4px;scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex:none;font-size:13px;padding:6px 13px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--line);color:var(--muted);
+    white-space:nowrap;transition:all .15s;
+  }
+  .chip[data-active="1"]{background:var(--ember);color:#181513;border-color:var(--ember);font-weight:600;}
+
+  /* ---- Recipe list ---- */
+  .list{padding:8px var(--pad) 120px;display:flex;flex-direction:column;gap:12px;}
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;transition:transform .12s,border-color .15s;text-align:left;width:100%;
+    display:block;
+  }
+  .card:active{transform:scale(.985);border-color:var(--line-strong);}
+  .card-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+  .card-title{font-size:18px;font-weight:600;line-height:1.25;color:var(--ink);}
+  .card-yield{font-family:var(--mono);font-size:12px;color:var(--ember);white-space:nowrap;flex:none;}
+  .card-meta{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .tag{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);background:var(--bg-2);border:1px solid var(--line);
+    padding:2px 8px;border-radius:6px;
+  }
+  .card-sub{margin-top:8px;color:var(--faint);font-size:13px;}
+
+  /* ---- Empty state ---- */
+  .empty{padding:60px 30px;text-align:center;color:var(--muted);}
+  .empty .ring{
+    width:64px;height:64px;border-radius:50%;margin:0 auto 22px;
+    border:2px dashed var(--line-strong);display:grid;place-items:center;color:var(--ember);
+  }
+  .empty .ring svg{width:28px;height:28px;}
+  .empty h2{font-family:var(--display);font-weight:400;font-size:22px;color:var(--ink);margin:0 0 8px;}
+  .empty p{font-size:14px;margin:0 auto 22px;max-width:280px;line-height:1.6;}
+  .empty .seed{
+    font-size:13px;color:var(--ember);font-family:var(--mono);
+    border-bottom:1px solid var(--ember-deep);padding-bottom:2px;
+  }
+
+  /* ---- FAB ---- */
+  .fab{
+    position:fixed;bottom:calc(env(safe-area-inset-bottom) + 22px);right:50%;
+    transform:translateX(calc(280px - 22px));
+    width:58px;height:58px;border-radius:18px;z-index:30;
+    background:linear-gradient(150deg,var(--ember),var(--ember-deep));
+    color:#181513;display:grid;place-items:center;box-shadow:0 8px 24px rgba(240,162,60,.35);
+    transition:transform .15s;
+  }
+  .fab:active{transform:translateX(calc(280px - 22px)) scale(.92);}
+  .fab svg{width:26px;height:26px;}
+  @media(max-width:600px){
+    .fab{right:22px;transform:none;}
+    .fab:active{transform:scale(.92);}
+  }
+
+  /* ---- Detail / Editor sheet ---- */
+  .screen{
+    position:fixed;inset:0;z-index:40;background:var(--bg);
+    max-width:560px;margin:0 auto;overflow-y:auto;
+    transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;
+  }
+  .screen[data-open="1"]{transform:translateX(0);}
+  .screen-bar{
+    position:sticky;top:0;z-index:5;background:var(--bg);
+    padding:calc(env(safe-area-inset-top) + 12px) var(--pad) 12px;
+    display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);
+  }
+  .screen-bar .title{font-size:14px;font-family:var(--mono);letter-spacing:.05em;color:var(--muted);text-transform:uppercase;}
+  .back-btn{display:flex;align-items:center;gap:5px;color:var(--ink);font-size:15px;padding:4px 6px 4px 0;}
+  .back-btn svg{width:20px;height:20px;}
+  .bar-spacer{margin-left:auto;display:flex;gap:4px;}
+
+  .detail-body{padding:22px var(--pad) 60px;}
+  .detail-title{font-family:var(--display);font-weight:400;font-size:30px;line-height:1.15;color:var(--ink);margin:0 0 12px;}
+  .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px;}
+
+  /* scaler */
+  .scaler{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:24px;
+  }
+  .scaler-label{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-bottom:10px;}
+  .scaler-row{display:flex;align-items:center;gap:14px;}
+  .step-btn{
+    width:40px;height:40px;border-radius:11px;background:var(--surface-2);border:1px solid var(--line);
+    display:grid;place-items:center;color:var(--ember);font-size:22px;line-height:1;font-family:var(--mono);
+  }
+  .step-btn:active{background:var(--ember);color:#181513;}
+  .scaler-val{flex:1;text-align:center;}
+  .scaler-val input{
+    width:90px;background:none;border:none;outline:none;text-align:center;color:var(--ink);
+    font-family:var(--mono);font-size:30px;font-weight:500;
+  }
+  .scaler-unit{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:-2px;}
+  .scaler-reset{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:10px;text-align:center;width:100%;}
+  .scaler-reset[data-show="1"]{color:var(--ember);}
+
+  .section-h{
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--ember);margin:0 0 14px;display:flex;align-items:center;gap:10px;
+  }
+  .section-h::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  .ing{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);}
+  .ing:last-child{border-bottom:none;}
+  .ing-name{font-size:15px;color:var(--ink);}
+  .ing-amt{font-family:var(--mono);font-size:15px;color:var(--ember);white-space:nowrap;font-weight:500;}
+  .ing-amt .u{color:var(--muted);font-weight:400;font-size:13px;}
+
+  .steps{counter-reset:s;margin:0;padding:0;list-style:none;}
+  .steps li{
+    counter-increment:s;position:relative;padding:0 0 18px 40px;font-size:15px;line-height:1.6;color:var(--ink);
+  }
+  .steps li::before{
+    content:counter(s,decimal-leading-zero);position:absolute;left:0;top:0;
+    font-family:var(--mono);font-size:13px;color:var(--ember-deep);font-weight:700;
+  }
+  .steps li::after{
+    content:"";position:absolute;left:9px;top:22px;bottom:2px;width:1px;background:var(--line);
+  }
+  .steps li:last-child::after{display:none;}
+
+  .notes{
+    background:var(--bg-2);border:1px solid var(--line);border-left:3px solid var(--ember-deep);
+    border-radius:8px;padding:14px 16px;font-size:14px;line-height:1.65;color:var(--muted);white-space:pre-wrap;
+  }
+  .detail-section{margin-bottom:30px;}
+
+  /* big action buttons */
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    padding:14px;border-radius:12px;font-size:15px;font-weight:600;transition:filter .15s,background .15s;
+  }
+  .btn svg{width:18px;height:18px;}
+  .btn-primary{background:linear-gradient(150deg,var(--ember),var(--ember-deep));color:#181513;}
+  .btn-primary:active{filter:brightness(.92);}
+  .btn-ghost{background:var(--surface);border:1px solid var(--line);color:var(--ink);}
+  .btn-ghost:active{background:var(--surface-2);}
+  .btn-danger{background:none;border:1px solid rgba(217,113,78,.4);color:var(--danger);}
+  .btn-row{display:flex;gap:10px;margin-top:8px;}
+  .btn-row .btn{margin:0;}
+
+  /* ---- Editor form ---- */
+  .field{margin-bottom:20px;}
+  .field label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .input,.textarea{
+    width:100%;background:var(--surface);border:1px solid var(--line);border-radius:11px;
+    padding:12px 14px;color:var(--ink);font-size:16px;outline:none;transition:border-color .15s;
+  }
+  .input:focus,.textarea:focus{border-color:var(--ember-deep);}
+  .textarea{resize:vertical;min-height:80px;line-height:1.6;}
+  .two-col{display:flex;gap:10px;}
+  .two-col .field{flex:1;}
+
+  .row-line{display:flex;gap:8px;margin-bottom:9px;align-items:center;}
+  .row-line .amt{width:74px;flex:none;}
+  .row-line .unit{width:64px;flex:none;}
+  .row-line .grow{flex:1;}
+  .row-line .input{padding:10px 12px;font-size:15px;}
+  .row-del{
+    width:38px;height:38px;flex:none;border-radius:10px;display:grid;place-items:center;
+    color:var(--faint);background:var(--surface);border:1px solid var(--line);
+  }
+  .row-del:active{color:var(--danger);}
+  .row-del svg{width:16px;height:16px;}
+  .add-row{
+    width:100%;padding:11px;border-radius:11px;background:none;border:1px dashed var(--line-strong);
+    color:var(--muted);font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px;
+  }
+  .add-row:active{color:var(--ember);border-color:var(--ember-deep);}
+  .add-row svg{width:16px;height:16px;}
+  .step-line{display:flex;gap:8px;margin-bottom:9px;align-items:flex-start;}
+  .step-line .num{font-family:var(--mono);font-size:13px;color:var(--ember-deep);font-weight:700;padding-top:13px;width:22px;flex:none;text-align:right;}
+
+  /* ---- Toast ---- */
+  .toast{
+    position:fixed;bottom:calc(env(safe-area-inset-bottom) + 90px);left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--surface-2);border:1px solid var(--line-strong);color:var(--ink);
+    padding:12px 20px;border-radius:12px;font-size:14px;z-index:100;box-shadow:var(--shadow);
+    opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:90%;text-align:center;
+  }
+  .toast[data-show="1"]{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.ok{border-color:var(--ember-deep);}
+
+  /* ---- Modal (share / import) ---- */
+  .overlay{
+    position:fixed;inset:0;z-index:60;background:rgba(10,8,7,.7);backdrop-filter:blur(3px);
+    display:none;align-items:flex-end;justify-content:center;
+  }
+  .overlay[data-open="1"]{display:flex;}
+  .modal{
+    background:var(--surface);border:1px solid var(--line-strong);border-radius:20px 20px 0 0;
+    width:100%;max-width:560px;padding:24px var(--pad) calc(env(safe-area-inset-bottom) + 28px);
+    animation:slideUp .25s cubic-bezier(.4,0,.2,1);
+  }
+  @keyframes slideUp{from{transform:translateY(40px);opacity:.5;}to{transform:translateY(0);opacity:1;}}
+  .modal h3{font-family:var(--display);font-weight:400;font-size:21px;margin:0 0 6px;color:var(--ink);}
+  .modal p{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.6;}
+  .modal .preview-card{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:18px;}
+  .modal .preview-card .pt{font-size:17px;font-weight:600;margin-bottom:4px;}
+  .modal .preview-card .ps{font-family:var(--mono);font-size:12px;color:var(--ember);}
+  .visually-hidden{position:absolute;left:-9999px;}
+  noscript{display:block;padding:40px;text-align:center;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark" aria-hidden="true"></div>
+      <div>
+        <div class="wordmark">สูตร</div>
+        <div class="eyebrow">The Catch Up · Formula Book</div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="btnTheme" aria-label="สลับธีม สว่าง/มืด" title="สลับธีม สว่าง/มืด">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <button class="icon-btn" id="btnBackup" aria-label="สำรอง / กู้คืนข้อมูล" title="สำรอง / กู้คืนข้อมูล">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+      <input id="search" type="search" placeholder="ค้นหาสูตร ส่วนผสม หรือแท็ก…" autocomplete="off">
+    </div>
+  </div>
+  <div class="chips" id="chips"></div>
+
+  <div id="list" class="list"></div>
+
+  <button class="fab" id="btnAdd" aria-label="เพิ่มสูตรใหม่">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+</div>
+
+<!-- Detail screen -->
+<section class="screen" id="detailScreen" aria-hidden="true"></section>
+
+<!-- Editor screen -->
+<section class="screen" id="editScreen" aria-hidden="true"></section>
+
+<!-- Modal overlay -->
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+
+<!-- file input for restore -->
+<input type="file" id="fileInput" accept="application/json,.json" class="visually-hidden">
+
+<div class="toast" id="toast"></div>
+<noscript>แอปนี้ต้องเปิดใช้งาน JavaScript</noscript>
+
+<script>
+"use strict";
+
+/* ---------------- Storage (works in Claude artifact via window.storage, else localStorage) ---------------- */
+const KEY = "catchup_recipes_v1";
+const store = {
+  async get(k){
+    if (window.storage && window.storage.get){
+      try { const r = await window.storage.get(k); return r ? r.value : null; }
+      catch(e){ return null; }
+    }
+    try { return localStorage.getItem(k); } catch(e){ return null; }
+  },
+  async set(k,v){
+    if (window.storage && window.storage.set){
+      try { await window.storage.set(k,v); return; } catch(e){}
+    }
+    try { localStorage.setItem(k,v); } catch(e){ toast("เก็บข้อมูลไม่ได้ — พื้นที่อาจเต็ม"); }
+  }
+};
+
+/* ---------------- State ---------------- */
+let recipes = [];
+let activeTag = "";
+let query = "";
+let currentScale = 1;
+let scaleBase = 1;
+
+/* ---------------- Utils ---------------- */
+const $ = s => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const esc = s => (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function fmtNum(n){
+  if (n === "" || n == null || isNaN(n)) return "";
+  const v = Number(n);
+  if (v >= 100) return Math.round(v).toString();
+  if (v >= 10)  return (Math.round(v*10)/10).toString();
+  return (Math.round(v*100)/100).toString();
+}
+
+// Show small/awkward decimals as clean kitchen fractions (0.25 -> ¼, 1.5 -> 1½)
+function toFrac(n){
+  if (n === "" || n == null || isNaN(n)) return "";
+  const v = Number(n);
+  if (v >= 10) return fmtNum(v);               // grams etc. — keep plain numbers
+  const whole = Math.floor(v + 1e-9);
+  const frac = v - whole;
+  const map = [[0.125,"⅛"],[0.25,"¼"],[1/3,"⅓"],[0.375,"⅜"],[0.5,"½"],[0.625,"⅝"],[2/3,"⅔"],[0.75,"¾"],[0.875,"⅞"]];
+  let glyph = "", diff = 0.04;
+  for (const [f,g] of map){ if (Math.abs(frac-f) < diff){ glyph=g; diff=Math.abs(frac-f); } }
+  if (frac < 0.04) return String(whole);
+  if (glyph) return whole > 0 ? whole + glyph : glyph;
+  return fmtNum(v);
+}
+
+let toastTimer;
+function toast(msg, ok){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.toggle("ok", !!ok);
+  t.dataset.show = "1";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.dataset.show = "0", 2400);
+}
+
+/* ---------------- Share encoding (UTF-8 safe base64url — handles Thai) ---------------- */
+function encodeRecipe(r){
+  const payload = {t:r.title, c:r.category, g:r.tags, y:r.yield, i:r.ingredients, s:r.steps, n:r.notes};
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function decodeRecipe(str){
+  let s = str.replace(/-/g,"+").replace(/_/g,"/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  const p = JSON.parse(new TextDecoder().decode(bytes));
+  return {title:p.t||"สูตรที่แชร์มา", category:p.c||"", tags:p.g||[], yield:p.y||{amount:1,unit:""}, ingredients:p.i||[], steps:p.s||[], notes:p.n||""};
+}
+
+/* ---------------- Persistence ---------------- */
+async function load(){
+  const raw = await store.get(KEY);
+  if (raw === null || raw === undefined){
+    recipes = defaultRecipes();
+    await save();
+  } else {
+    try { recipes = JSON.parse(raw) || []; } catch(e){ recipes = []; }
+  }
+}
+async function save(){ await store.set(KEY, JSON.stringify(recipes)); }
+
+/* ---------------- List rendering ---------------- */
+function allTags(){
+  const set = new Set();
+  recipes.forEach(r => (r.tags||[]).forEach(t => t && set.add(t)));
+  return [...set].sort((a,b)=>a.localeCompare(b,"th"));
+}
+
+function filtered(){
+  const q = query.trim().toLowerCase();
+  return recipes.filter(r => {
+    if (activeTag && !(r.tags||[]).includes(activeTag)) return false;
+    if (!q) return true;
+    const hay = [r.title, r.category, (r.tags||[]).join(" "),
+      (r.ingredients||[]).map(i=>i.name).join(" ")].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderChips(){
+  const tags = allTags();
+  const box = $("#chips");
+  if (!tags.length){ box.innerHTML = ""; return; }
+  box.innerHTML = `<button class="chip" data-tag="" data-active="${activeTag===""?1:0}">ทั้งหมด</button>` +
+    tags.map(t => `<button class="chip" data-tag="${esc(t)}" data-active="${activeTag===t?1:0}">${esc(t)}</button>`).join("");
+}
+
+function renderList(){
+  renderChips();
+  const list = $("#list");
+  const items = filtered();
+
+  if (!recipes.length){
+    list.innerHTML = `
+      <div class="empty">
+        <div class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 4v5h5"/></svg></div>
+        <h2>ยังไม่มีสูตรในเล่ม</h2>
+        <p>เก็บทุกสูตรไว้ที่เดียว ค้นหาเจอใน 2 วิ ไม่หาย และส่งลิงก์ให้เพื่อนได้</p>
+        <button class="seed" id="btnSeed">+ ใส่สูตรตัวอย่าง</button>
+      </div>`;
+    return;
+  }
+  if (!items.length){
+    list.innerHTML = `<div class="empty"><h2>ไม่เจอสูตร</h2><p>ลองคำค้นอื่น หรือเอาตัวกรองแท็กออก</p></div>`;
+    return;
+  }
+
+  list.innerHTML = items.map(r => {
+    const y = r.yield && r.yield.amount ? `${fmtNum(r.yield.amount)} ${esc(r.yield.unit||"")}` : "";
+    const tags = (r.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+    const nIng = (r.ingredients||[]).length;
+    const nStep = (r.steps||[]).length;
+    return `
+      <button class="card" data-id="${r.id}">
+        <div class="card-top">
+          <div class="card-title">${esc(r.title)}</div>
+          ${y?`<div class="card-yield">${y}</div>`:""}
+        </div>
+        ${tags?`<div class="card-meta">${tags}</div>`:""}
+        <div class="card-sub mono">${nIng} ส่วนผสม · ${nStep} ขั้นตอน</div>
+      </button>`;
+  }).join("");
+}
+
+/* ---------------- Detail view ---------------- */
+function openDetail(id){
+  const r = recipes.find(x => x.id === id);
+  if (!r) return;
+  scaleBase = (r.yield && Number(r.yield.amount)) || 1;
+  currentScale = 1;
+  renderDetail(r);
+  showScreen("#detailScreen");
+}
+
+function renderDetail(r){
+  const unit = (r.yield && r.yield.unit) || "";
+  const target = fmtNum(scaleBase * currentScale);
+  const ings = (r.ingredients||[]).map(i => {
+    const amt = i.amount !== "" && i.amount != null && !isNaN(i.amount)
+      ? `${toFrac(Number(i.amount)*currentScale)} <span class="u">${esc(i.unit||"")}</span>` : `<span class="u">${esc(i.unit||"")}</span>`;
+    return `<div class="ing"><span class="ing-name">${esc(i.name)}</span><span class="ing-amt">${amt}</span></div>`;
+  }).join("") || `<div class="card-sub">— ยังไม่มีส่วนผสม —</div>`;
+
+  const steps = (r.steps||[]).filter(s=>s&&s.trim()).map(s=>`<li>${esc(s)}</li>`).join("");
+  const tags = (r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+
+  const scaler = scaleBase ? `
+    <div class="scaler">
+      <div class="scaler-label">ปรับปริมาณ / สเกลสูตร</div>
+      <div class="scaler-row">
+        <button class="step-btn" data-scale="down">−</button>
+        <div class="scaler-val">
+          <input id="scaleInput" type="number" inputmode="decimal" value="${target}">
+          <div class="scaler-unit mono">${esc(unit)||"หน่วย"}</div>
+        </div>
+        <button class="step-btn" data-scale="up">+</button>
+      </div>
+      <button class="scaler-reset mono" id="scaleReset" data-show="${currentScale!==1?1:0}">×${fmtNum(currentScale)} — แตะเพื่อรีเซ็ต</button>
+    </div>` : "";
+
+  $("#detailScreen").innerHTML = `
+    <div class="screen-bar">
+      <button class="back-btn" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>เล่มสูตร</button>
+      <div class="bar-spacer">
+        <button class="icon-btn" data-share="${r.id}" aria-label="แชร์"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+        <button class="icon-btn" data-edit="${r.id}" aria-label="แก้ไข"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+      </div>
+    </div>
+    <div class="detail-body">
+      <h1 class="detail-title">${esc(r.title)}</h1>
+      ${tags?`<div class="detail-tags">${tags}</div>`:""}
+      ${scaler}
+      <div class="detail-section">
+        <p class="section-h">ส่วนผสม</p>
+        ${ings}
+      </div>
+      ${steps?`<div class="detail-section"><p class="section-h">วิธีทำ</p><ol class="steps">${steps}</ol></div>`:""}
+      ${r.notes?`<div class="detail-section"><p class="section-h">โน้ต</p><div class="notes">${esc(r.notes)}</div></div>`:""}
+      <button class="btn btn-danger" data-del="${r.id}" style="margin-top:10px">ลบสูตรนี้</button>
+    </div>`;
+}
+
+function applyScale(r, val){
+  if (!scaleBase) return;
+  const v = Number(val);
+  currentScale = (!v || v <= 0) ? currentScale : v / scaleBase;
+  renderDetail(r);
+}
+
+/* ---------------- Editor ---------------- */
+function openEditor(id){
+  const r = id ? recipes.find(x=>x.id===id) : null;
+  const data = r ? JSON.parse(JSON.stringify(r)) : {title:"",category:"",tags:[],yield:{amount:"",unit:""},ingredients:[{amount:"",unit:"",name:""}],steps:[""],notes:""};
+  if (!data.ingredients.length) data.ingredients = [{amount:"",unit:"",name:""}];
+  if (!data.steps.length) data.steps = [""];
+  $("#editScreen")._data = data;
+  $("#editScreen")._id = id || null;
+  renderEditor();
+  showScreen("#editScreen");
+}
+
+function renderEditor(){
+  const d = $("#editScreen")._data;
+  const ingRows = d.ingredients.map((i,idx)=>`
+    <div class="row-line" data-ing="${idx}">
+      <input class="input amt mono" data-f="amount" inputmode="decimal" placeholder="120" value="${esc(String(i.amount??""))}">
+      <input class="input unit" data-f="unit" placeholder="g" value="${esc(i.unit||"")}">
+      <input class="input grow" data-f="name" placeholder="แป้ง Venus" value="${esc(i.name||"")}">
+      <button class="row-del" data-delivar="${idx}" aria-label="ลบ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>`).join("");
+  const stepRows = d.steps.map((s,idx)=>`
+    <div class="step-line" data-step="${idx}">
+      <span class="num">${String(idx+1).padStart(2,"0")}</span>
+      <textarea class="textarea" data-f="step" rows="2" placeholder="อธิบายขั้นตอน…">${esc(s)}</textarea>
+      <button class="row-del" data-delstep="${idx}" aria-label="ลบ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>`).join("");
+
+  $("#editScreen").innerHTML = `
+    <div class="screen-bar">
+      <button class="back-btn" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>ยกเลิก</button>
+      <span class="title">${$("#editScreen")._id ? "แก้ไขสูตร" : "สูตรใหม่"}</span>
+      <div class="bar-spacer"><button class="icon-btn" id="saveTop" aria-label="บันทึก" style="color:var(--ember)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+    </div>
+    <div class="detail-body">
+      <div class="field">
+        <label>ชื่อสูตร</label>
+        <input class="input" id="f-title" placeholder="ขนมปังซาวโดว์" value="${esc(d.title)}">
+      </div>
+      <div class="two-col">
+        <div class="field"><label>ปริมาณที่ได้</label><input class="input mono" id="f-yamt" inputmode="decimal" placeholder="16" value="${esc(String(d.yield.amount??""))}"></div>
+        <div class="field"><label>หน่วย</label><input class="input" id="f-yunit" placeholder="ก้อน" value="${esc(d.yield.unit||"")}"></div>
+      </div>
+      <div class="field">
+        <label>แท็ก (คั่นด้วย ,)</label>
+        <input class="input" id="f-tags" placeholder="ขนมปัง, ซาวโดว์, เมนูร้าน" value="${esc((d.tags||[]).join(", "))}">
+      </div>
+
+      <div class="field">
+        <label>ส่วนผสม</label>
+        <div id="ingList">${ingRows}</div>
+        <button class="add-row" id="addIng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> เพิ่มส่วนผสม</button>
+      </div>
+
+      <div class="field">
+        <label>วิธีทำ</label>
+        <div id="stepList">${stepRows}</div>
+        <button class="add-row" id="addStep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> เพิ่มขั้นตอน</button>
+      </div>
+
+      <div class="field">
+        <label>โน้ต (อุณหภูมิ, เวลาหมัก, เคล็ดลับ…)</label>
+        <textarea class="textarea" id="f-notes" rows="4" placeholder="cold retard 12 ชม. · levain 1:3:2 · อบ convection">${esc(d.notes||"")}</textarea>
+      </div>
+
+      <button class="btn btn-primary" id="saveBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> บันทึกสูตร</button>
+    </div>`;
+}
+
+function readEditorInto(d){
+  d.title = $("#f-title").value.trim();
+  d.yield = {amount: $("#f-yamt").value.trim(), unit: $("#f-yunit").value.trim()};
+  d.tags = $("#f-tags").value.split(",").map(t=>t.trim()).filter(Boolean);
+  d.notes = $("#f-notes").value.trim();
+  d.ingredients = [...document.querySelectorAll('#ingList .row-line')].map(row=>({
+    amount: row.querySelector('[data-f="amount"]').value.trim(),
+    unit: row.querySelector('[data-f="unit"]').value.trim(),
+    name: row.querySelector('[data-f="name"]').value.trim()
+  })).filter(i=>i.name || i.amount);
+  d.steps = [...document.querySelectorAll('#stepList .step-line textarea')].map(t=>t.value.trim()).filter(Boolean);
+}
+
+async function saveEditor(){
+  const screen = $("#editScreen");
+  const d = screen._data;
+  readEditorInto(d);
+  if (!d.title){ toast("ใส่ชื่อสูตรก่อนนะ"); return; }
+  const now = Date.now();
+  if (screen._id){
+    const idx = recipes.findIndex(r=>r.id===screen._id);
+    if (idx>-1) recipes[idx] = {...recipes[idx], ...d, updatedAt:now};
+  } else {
+    recipes.unshift({id:uid(), ...d, createdAt:now, updatedAt:now});
+  }
+  await save();
+  renderList();
+  closeScreen("#editScreen");
+  toast("บันทึกแล้ว", true);
+}
+
+/* ---------------- Screen helpers ---------------- */
+function showScreen(sel){ $(sel).dataset.open = "1"; $(sel).setAttribute("aria-hidden","false"); document.body.style.overflow="hidden"; }
+function closeScreen(sel){ $(sel).dataset.open = "0"; $(sel).setAttribute("aria-hidden","true"); document.body.style.overflow=""; }
+
+/* ---------------- Share / Import modal ---------------- */
+function openShare(id){
+  const r = recipes.find(x=>x.id===id);
+  if (!r) return;
+  const base = location.origin + location.pathname;
+  const link = base + "#r=" + encodeRecipe(r);
+  const long = link.length > 1800;
+  $("#modal").innerHTML = `
+    <h3>แชร์ “${esc(r.title)}”</h3>
+    <p>ลิงก์นี้มีสูตรฝังอยู่ในตัว เพื่อนกดเปิดแล้วกด “เซฟเข้าเล่ม” ได้เลย ไม่ต้องมีเซิร์ฟเวอร์</p>
+    ${long?`<p style="color:var(--danger)">⚠ สูตรยาวมาก ลิงก์อาจถูกตัดในบางแอป — ลองสำรองเป็นไฟล์แทน</p>`:""}
+    <button class="btn btn-primary" id="copyLink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> คัดลอกลิงก์</button>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="shareNative">แชร์ผ่านแอป…</button>
+      <button class="btn btn-ghost" data-modal-close>ปิด</button>
+    </div>`;
+  openOverlay();
+  $("#copyLink").onclick = async ()=>{ await copyText(link); toast("คัดลอกลิงก์แล้ว — ส่งใน LINE ได้เลย", true); };
+  $("#shareNative").onclick = async ()=>{
+    if (navigator.share){ try{ await navigator.share({title:r.title, url:link}); }catch(e){} }
+    else { await copyText(link); toast("คัดลอกลิงก์แล้ว", true); }
+  };
+}
+
+function openImport(data){
+  const y = data.yield && data.yield.amount ? `${fmtNum(data.yield.amount)} ${esc(data.yield.unit||"")}` : "";
+  $("#modal").innerHTML = `
+    <h3>มีคนแชร์สูตรมาให้</h3>
+    <p>เซฟสูตรนี้เข้าเล่มของคุณไหม? ข้อมูลจะถูกเก็บในเครื่องนี้</p>
+    <div class="preview-card">
+      <div class="pt">${esc(data.title)}</div>
+      <div class="ps mono">${(data.ingredients||[]).length} ส่วนผสม${y?" · "+y:""}</div>
+    </div>
+    <button class="btn btn-primary" id="acceptImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> เซฟเข้าเล่ม</button>
+    <div class="btn-row"><button class="btn btn-ghost" data-modal-close>ไม่ใช่ตอนนี้</button></div>`;
+  openOverlay();
+  $("#acceptImport").onclick = async ()=>{
+    const now = Date.now();
+    recipes.unshift({id:uid(), ...data, createdAt:now, updatedAt:now});
+    await save();
+    renderList();
+    closeOverlay();
+    history.replaceState(null,"",location.pathname);
+    toast("เซฟเข้าเล่มแล้ว", true);
+  };
+}
+
+function openOverlay(){ $("#overlay").dataset.open="1"; }
+function closeOverlay(){ $("#overlay").dataset.open="0"; }
+
+async function copyText(text){
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){
+    const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.left="-9999px";
+    document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){} document.body.removeChild(ta);
+  }
+}
+
+/* ---------------- Backup / Restore ---------------- */
+function openBackup(){
+  $("#modal").innerHTML = `
+    <h3>สำรอง / กู้คืน</h3>
+    <p>สำรองสูตรทั้งหมดเป็นไฟล์ไว้กันหาย หรือกู้คืน/ย้ายเครื่องด้วยไฟล์เดิม</p>
+    <button class="btn btn-primary" id="doExport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg> ดาวน์โหลดไฟล์สำรอง (${recipes.length} สูตร)</button>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="doImport">กู้คืนจากไฟล์</button>
+      <button class="btn btn-ghost" data-modal-close>ปิด</button>
+    </div>`;
+  openOverlay();
+  $("#doExport").onclick = exportFile;
+  $("#doImport").onclick = ()=> $("#fileInput").click();
+}
+
+function exportFile(){
+  const blob = new Blob([JSON.stringify(recipes,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `catchup-recipes-${d}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("ดาวน์โหลดไฟล์สำรองแล้ว", true);
+}
+
+$("#fileInput").addEventListener("change", e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data)) throw 0;
+      const byId = {};
+      recipes.forEach(r=>byId[r.id]=r);
+      data.forEach(r=>{ if(r && r.id) byId[r.id]=r; });
+      recipes = Object.values(byId).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+      await save(); renderList(); closeOverlay();
+      toast(`กู้คืนแล้ว — รวม ${recipes.length} สูตร`, true);
+    }catch(err){ toast("ไฟล์ไม่ถูกต้อง"); }
+    e.target.value="";
+  };
+  reader.readAsText(file);
+});
+
+/* ---------------- Default / sample recipes ---------------- */
+function defaultRecipes(){
+  const now = Date.now();
+  return [
+    {
+      id:uid(),
+      title:"Brownie Cheese Berry",
+      category:"ของหวาน",
+      tags:["บราวนี่","ของหวาน"],
+      yield:{amount:"", unit:""},
+      ingredients:[
+        {amount:"150", unit:"g", name:"แป้งอเนกประสงค์"},
+        {amount:"30",  unit:"g", name:"ผงโกโก้"},
+        {amount:"250", unit:"g", name:"ช็อกโกแลตดำ"},
+        {amount:"120", unit:"g", name:"เนย"},
+        {amount:"200", unit:"g", name:"น้ำตาลทราย"},
+        {amount:"3",   unit:"ฟอง", name:"ไข่ไก่"},
+        {amount:"1",   unit:"ช้อนชา", name:"ผงกาแฟ"},
+        {amount:"0.5", unit:"ช้อนชา", name:"ผงฟู"},
+        {amount:"0.5", unit:"ช้อนชา", name:"เกลือ"}
+      ],
+      steps:[],
+      notes:"เฉพาะชั้นบราวนี่จากสกรีนช็อต — ชั้นชีสกับเบอร์รี่ยังไม่มีในรูป เพิ่มทีหลังได้เลย\n(by Kev Ketkaew)",
+      createdAt:now, updatedAt:now
+    },
+    {
+      id:uid(),
+      title:"ขนมปังซาวโดว์",
+      category:"ขนมปัง",
+      tags:["ขนมปัง","ซาวโดว์","เมนูร้าน"],
+      yield:{amount:16, unit:"ก้อน"},
+      ingredients:[
+        {amount:"5000", unit:"g", name:"แป้ง Venus"},
+        {amount:"3500", unit:"g", name:"น้ำ (70%)"},
+        {amount:"100",  unit:"g", name:"เกลือ (2%)"},
+        {amount:"1000", unit:"g", name:"levain (stiff 1:3:2)"}
+      ],
+      steps:[
+        "สร้าง levain 1:3:2 (starter:แป้ง:น้ำ) ~67% hydration พักจนพองตัวเต็มที่",
+        "ผสมแป้งกับน้ำ autolyse 30–60 นาที",
+        "ใส่ levain และเกลือ นวดจนเนียน แล้วทำ stretch & fold ทุก 30 นาที 3–4 รอบ",
+        "Bulk fermentation ตามอุณหภูมิห้อง (กรุงเทพ ~28–30°C) จนขึ้นราว 50%",
+        "แบ่ง พักก้อน 20 นาที แล้วขึ้นรูปลงตะกร้า",
+        "Cold retard ในตู้เย็น 12 ชม.",
+        "อบ convection — สกอร์ตรงกลางด้านบนเพื่อเลี่ยง blowout ด้านข้าง"
+      ],
+      notes:"ครัสต์ตั้งใจให้สีอ่อนตามที่ลูกค้าชอบ · max batch ปัจจุบัน 16 ก้อน",
+      createdAt:now-1000, updatedAt:now-1000
+    }
+  ];
+}
+
+async function seedSample(){
+  recipes = defaultRecipes().concat(recipes);
+  await save();
+  renderList();
+  toast("ใส่สูตรตัวอย่างแล้ว", true);
+}
+
+/* ---------------- Event wiring ---------------- */
+$("#search").addEventListener("input", e=>{ query = e.target.value; renderList(); });
+
+$("#chips").addEventListener("click", e=>{
+  const c = e.target.closest(".chip"); if(!c) return;
+  activeTag = c.dataset.tag; renderList();
+});
+
+$("#list").addEventListener("click", e=>{
+  if (e.target.closest("#btnSeed")){ seedSample(); return; }
+  const card = e.target.closest(".card");
+  if (card){ openDetail(card.dataset.id); }
+});
+
+$("#btnAdd").addEventListener("click", ()=> openEditor(null));
+$("#btnBackup").addEventListener("click", openBackup);
+
+/* ---------------- Theme (light default, dark optional, remembered) ---------------- */
+const THEME_KEY = "catchup_theme";
+function setTheme(t){
+  if (t === "dark") document.documentElement.setAttribute("data-theme","dark");
+  else document.documentElement.removeAttribute("data-theme");
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t === "dark" ? "#231A14" : "#EFE4D2");
+}
+async function loadTheme(){
+  let t = await store.get(THEME_KEY);
+  if (t !== "dark" && t !== "light") t = "light";
+  setTheme(t);
+}
+async function toggleTheme(){
+  const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  const next = cur === "dark" ? "light" : "dark";
+  setTheme(next);
+  await store.set(THEME_KEY, next);
+  toast(next === "dark" ? "ธีมมืด — โหมดอบดึก" : "ธีมสว่าง", true);
+}
+$("#btnTheme").addEventListener("click", toggleTheme);
+
+/* detail screen delegation */
+$("#detailScreen").addEventListener("click", e=>{
+  if (e.target.closest("[data-close]")) return closeScreen("#detailScreen");
+  const sh = e.target.closest("[data-share]"); if (sh) return openShare(sh.dataset.share);
+  const ed = e.target.closest("[data-edit]"); if (ed){ closeScreen("#detailScreen"); return openEditor(ed.dataset.edit); }
+  const del = e.target.closest("[data-del]");
+  if (del){
+    if (confirm("ลบสูตรนี้ถาวร?")){
+      recipes = recipes.filter(r=>r.id!==del.dataset.del);
+      save(); renderList(); closeScreen("#detailScreen"); toast("ลบแล้ว");
+    }
+    return;
+  }
+  const sc = e.target.closest("[data-scale]");
+  if (sc){
+    const r = recipes.find(x=>x.id===$("#detailScreen").querySelector("[data-edit]").dataset.edit);
+    const stepFactor = sc.dataset.scale==="up" ? 1 : -1;
+    const newVal = scaleBase*currentScale + stepFactor*(scaleBase>=4?1:0.5);
+    applyScale(r, Math.max(0.5,newVal));
+    return;
+  }
+  if (e.target.closest("#scaleReset")){
+    const r = recipes.find(x=>x.id===$("#detailScreen").querySelector("[data-edit]").dataset.edit);
+    currentScale = 1; renderDetail(r); return;
+  }
+});
+$("#detailScreen").addEventListener("change", e=>{
+  if (e.target.id==="scaleInput"){
+    const r = recipes.find(x=>x.id===$("#detailScreen").querySelector("[data-edit]").dataset.edit);
+    applyScale(r, e.target.value);
+  }
+});
+
+/* editor screen delegation */
+$("#editScreen").addEventListener("click", e=>{
+  if (e.target.closest("[data-close]")) return closeScreen("#editScreen");
+  if (e.target.closest("#saveBtn")||e.target.closest("#saveTop")) return saveEditor();
+  const d = $("#editScreen")._data;
+  if (e.target.closest("#addIng")){ readEditorInto(d); d.ingredients.push({amount:"",unit:"",name:""}); renderEditor(); focusLast("#ingList .row-line .grow"); return; }
+  if (e.target.closest("#addStep")){ readEditorInto(d); d.steps.push(""); renderEditor(); focusLast("#stepList .step-line textarea"); return; }
+  const di = e.target.closest("[data-delivar]");
+  if (di){ readEditorInto(d); d.ingredients.splice(+di.dataset.delivar,1); if(!d.ingredients.length)d.ingredients=[{amount:"",unit:"",name:""}]; renderEditor(); return; }
+  const ds = e.target.closest("[data-delstep]");
+  if (ds){ readEditorInto(d); d.steps.splice(+ds.dataset.delstep,1); if(!d.steps.length)d.steps=[""]; renderEditor(); return; }
+});
+function focusLast(sel){ const els=document.querySelectorAll(sel); if(els.length) els[els.length-1].focus(); }
+
+/* overlay */
+$("#overlay").addEventListener("click", e=>{
+  if (e.target.id==="overlay" || e.target.closest("[data-modal-close]")) closeOverlay();
+});
+
+/* ---------------- Boot ---------------- */
+async function boot(){
+  await loadTheme();
+  await load();
+  renderList();
+  // incoming shared recipe?
+  const m = location.hash.match(/[#&]r=([^&]+)/);
+  if (m){
+    try { const data = decodeRecipe(m[1]); openImport(data); }
+    catch(e){ toast("ลิงก์สูตรอ่านไม่ได้"); history.replaceState(null,"",location.pathname); }
+  }
+}
+boot();
+
+/* service worker (for offline + installability when hosted) */
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>

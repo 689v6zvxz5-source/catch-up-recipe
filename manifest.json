@@ -1,0 +1,17 @@
+{
+  "name": "สูตร — The Catch Up",
+  "short_name": "สูตร",
+  "description": "เล่มสูตรส่วนตัว ค้นหาง่าย ไม่หาย แชร์ผ่านลิงก์ได้",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EFE4D2",
+  "theme_color": "#EFE4D2",
+  "lang": "th",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
