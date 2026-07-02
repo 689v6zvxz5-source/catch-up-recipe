@@ -428,7 +428,7 @@ const sbHeaders = () => {
 const ts = v => typeof v === "number" ? v : (v ? (Date.parse(v) || 0) : 0);
 
 async function cloudLoad(){
-  const res = await fetch(SB() + "?select=id,data,updated_at", { headers: sbHeaders() });
+  const res = await fetch(SB() + "?select=id,data,updated_at", { headers: sbHeaders(), cache: "no-store" });
   if (!res.ok) throw new Error("cloud load " + res.status);
   const rows = await res.json();
   return rows.map(r => ({ ...r.data, id: r.id }));
@@ -504,6 +504,13 @@ async function removeRemote(id){
 
 /* ---- Merge: รวมคลาวด์กับเครื่องนี้ ใครแก้ล่าสุดชนะ (ต่อสูตร) และไม่ทับของที่ยังไม่ได้อัป ---- */
 function mergeCloud(cloudRows){
+  // กันเหตุผิดปกติ: คลาวด์ตอบว่างแต่เครื่องเรามีสูตรอยู่ → อย่าลบตาม ให้ดันของเราขึ้นแทน
+  if (!cloudRows.length && recipes.length){
+    recipes.forEach(r => { pending.up[r.id] = 1; });
+    saveQueue();
+    flushQueue();
+    return;
+  }
   const out = {};
   cloudRows.forEach(r => { if (!pending.del[r.id]) out[r.id] = r; });
   recipes.forEach(r => {

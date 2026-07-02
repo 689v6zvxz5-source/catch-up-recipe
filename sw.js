@@ -1,4 +1,4 @@
-const CACHE = "catchup-recipes-v3";
+const CACHE = "catchup-recipes-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -22,6 +22,8 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
+  // อย่ายุ่งกับ API ภายนอก (Supabase ฯลฯ) — ห้าม cache เด็ดขาด ไม่งั้นข้อมูล sync ค้าง
+  if (new URL(req.url).origin !== location.origin) return;
   // Network-first for the page so updates land; cache fallback for offline.
   if (req.mode === "navigate") {
     e.respondWith(
