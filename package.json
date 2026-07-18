@@ -1,0 +1,9 @@
+{
+  "name": "the-catch-up-recipe-app",
+  "private": true,
+  "version": "1.1.0",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "lint": "node --check src/sync-core.js && node --check src/supabase-service.js"
+  }
+}

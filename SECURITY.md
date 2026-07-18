@@ -13,9 +13,12 @@ Never use a service-role key in this app.
 5. For each member, copy `migrations/002_add_member.template.sql`, replace the email and role, and run it in SQL Editor.
 6. Confirm at least one active `editor` exists.
 7. Run `migrations/003_lockdown_recipes.sql`.
-8. Run `migrations/004_security_verification.sql`.
-9. Test with an authorized editor, an authorized viewer, an authenticated non-member, and no session.
-10. Deploy clients only after every test passes.
+8. Run `migrations/005_recipe_tombstones.sql`.
+9. Run `migrations/004_security_verification.sql`.
+10. Test with an authorized editor, an authenticated non-member, and no session.
+11. Deploy clients only after Son and Ya have both passed sign-in and every access test passes.
+
+Make a fresh 57-recipe export immediately before the first production migration.
 
 ## Add a member
 
