@@ -1,8 +1,11 @@
-const CACHE = "catchup-recipes-v4";
+const CACHE = "catchup-recipes-v5";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./vendor/supabase.min.js",
+  "./src/sync-core.js",
+  "./src/supabase-service.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];

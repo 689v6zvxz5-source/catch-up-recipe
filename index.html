@@ -51,6 +51,7 @@
     --shadow:0 8px 28px rgba(0,0,0,0.40);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  [hidden]{display:none!important;}
   html,body{margin:0;padding:0;}
   body{
     background:var(--bg);
@@ -333,6 +334,26 @@
   .modal .preview-card .pt{font-size:17px;font-weight:600;margin-bottom:4px;}
   .modal .preview-card .ps{font-family:var(--mono);font-size:12px;color:var(--ember);}
   .visually-hidden{position:absolute;left:-9999px;}
+  .auth-gate{
+    position:fixed;inset:0;z-index:90;background:var(--bg);display:none;
+    align-items:center;justify-content:center;padding:24px;
+  }
+  .auth-gate[data-open="1"]{display:flex;}
+  .auth-card{
+    width:min(100%,420px);background:var(--surface);border:1px solid var(--line);
+    border-radius:22px;padding:28px;box-shadow:var(--shadow);
+  }
+  .auth-card .mark{margin-bottom:18px;}
+  .auth-card h1{font-family:var(--display);font-size:27px;font-weight:400;margin:0 0 8px;}
+  .auth-card p{color:var(--muted);font-size:14px;margin:0 0 20px;}
+  .auth-card label{display:block;font-size:13px;font-weight:600;margin-bottom:7px;}
+  .auth-card input{
+    width:100%;font-size:16px;color:var(--ink);background:var(--bg-2);border:1px solid var(--line-strong);
+    border-radius:12px;padding:12px 14px;outline:none;margin-bottom:12px;
+  }
+  .auth-card input:focus{border-color:var(--ember-deep);}
+  .auth-help{font-size:12px!important;margin-top:14px!important;margin-bottom:0!important;}
+  .auth-user{font-size:12px;color:var(--muted);padding:0 6px;max-width:180px;overflow:hidden;text-overflow:ellipsis;}
   noscript{display:block;padding:40px;text-align:center;color:var(--muted);}
 </style>
 </head>
@@ -346,6 +367,9 @@
         <div class="eyebrow">The Catch Up · Formula Book</div>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" id="btnAccount" aria-label="บัญชีผู้ใช้" title="บัญชีผู้ใช้" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>
+        </button>
         <button class="icon-btn" id="btnSync" aria-label="สถานะ sync — แตะเพื่อ sync เดี๋ยวนี้" title="สถานะ sync — แตะเพื่อ sync เดี๋ยวนี้">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .9-8.9 6 6 0 0 0-11.7 1.4A3.8 3.8 0 0 0 7 19Z"/></svg>
           <span class="sync-dot" id="syncDot"></span>
@@ -388,8 +412,22 @@
 <input type="file" id="fileInput" accept="application/json,.json" class="visually-hidden">
 
 <div class="toast" id="toast"></div>
+<section class="auth-gate" id="authGate" data-open="0" aria-hidden="true">
+  <form class="auth-card" id="authForm">
+    <div class="mark" aria-hidden="true"></div>
+    <h1>เข้าสู่เล่มสูตร</h1>
+    <p>ใช้เฉพาะอีเมลที่ได้รับอนุญาต ระบบจะส่งลิงก์เข้าสู่ระบบให้ทางอีเมลครับ</p>
+    <label for="authEmail">อีเมล</label>
+    <input id="authEmail" type="email" autocomplete="email" inputmode="email" required>
+    <button class="btn btn-primary" id="authSubmit" type="submit">ส่งลิงก์เข้าสู่ระบบ</button>
+    <p class="auth-help" id="authMessage" role="status"></p>
+  </form>
+</section>
 <noscript>แอปนี้ต้องเปิดใช้งาน JavaScript</noscript>
 
+<script src="vendor/supabase.min.js"></script>
+<script src="src/sync-core.js"></script>
+<script src="src/supabase-service.js"></script>
 <script>
 "use strict";
 
@@ -417,45 +455,32 @@ const SUPABASE_URL = "https://lteqlrqoaqtunspradrp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ImQ-xGOOidJZxdNRhUX8jw_H0Q9mHHt";
 // ▲▲▲ ปล่อยว่างทั้งคู่ = ใช้แบบ local เครื่องเดียว (เหมือนเดิม) ▲▲▲
 const CLOUD = !!(SUPABASE_URL && SUPABASE_KEY);
-const SB = () => `${SUPABASE_URL}/rest/v1/recipes`;
-const sbHeaders = () => {
-  const h = { apikey: SUPABASE_KEY, "Content-Type": "application/json" };
-  if (/^eyJ/.test(SUPABASE_KEY)) h.Authorization = "Bearer " + SUPABASE_KEY; // legacy anon = JWT
-  return h;
-};
+const syncCore = window.CatchUpRecipeSync;
+const cloudService = CLOUD
+  ? window.CatchUpRecipeCloud.createRecipeCloudService({ url: SUPABASE_URL, key: SUPABASE_KEY, library: window.supabase })
+  : null;
+let authSession = null;
+let accessRole = null;
 
 // updatedAt อาจเป็นตัวเลข (ms) หรือ ISO string (จากไฟล์ recipes.json) — แปลงให้เทียบกันได้เสมอ
 const ts = v => typeof v === "number" ? v : (v ? (Date.parse(v) || 0) : 0);
 
-async function cloudLoad(){
-  const res = await fetch(SB() + "?select=id,data,updated_at", { headers: sbHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("cloud load " + res.status);
-  const rows = await res.json();
-  return rows.map(r => ({ ...r.data, id: r.id }));
-}
-async function cloudUpsert(r){
-  const res = await fetch(SB(), {
-    method: "POST",
-    headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ id: r.id, data: r, updated_at: new Date(ts(r.updatedAt) || Date.now()).toISOString() })
-  });
-  if (!res.ok) throw new Error("cloud save " + res.status);
-}
-async function cloudDelete(id){
-  const res = await fetch(SB() + "?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: sbHeaders() });
-  if (!res.ok) throw new Error("cloud delete " + res.status);
-}
 function cacheLocal(){ try { store.set(KEY, JSON.stringify(recipes)); } catch(e){} }
 
 /* ---- Pending queue: กันข้อมูลหายตอนออฟไลน์ — จดไว้ก่อน แล้วส่งขึ้นคลาวด์เมื่อเน็ตกลับมา ---- */
-const QKEY = "catchup_pending_v1";
-const SEEDED_KEY = "catchup_cloud_seeded_v1";
-let pending = { up: {}, del: {} };
+const QKEY = "catchup_pending_v2";
+const LEGACY_QKEY = "catchup_pending_v1";
+let pending = syncCore.emptyQueue();
 async function loadQueue(){
-  try { const raw = await store.get(QKEY); if (raw) pending = { up:{}, del:{}, ...JSON.parse(raw) }; } catch(e){}
+  try {
+    const raw = await store.get(QKEY);
+    const legacy = raw ? null : await store.get(LEGACY_QKEY);
+    pending = syncCore.migrateQueue(JSON.parse(raw || legacy || "null"), recipes);
+    await saveQueue();
+  } catch(e){ pending = syncCore.emptyQueue(); }
 }
-function saveQueue(){ try { store.set(QKEY, JSON.stringify(pending)); } catch(e){} }
-function hasPending(){ return Object.keys(pending.up).length + Object.keys(pending.del).length > 0; }
+async function saveQueue(){ try { await store.set(QKEY, JSON.stringify(pending)); } catch(e){} }
+function hasPending(){ return syncCore.hasPending(pending); }
 
 let syncFailed = false;
 function setSync(){
@@ -467,22 +492,26 @@ function setSync(){
 
 let flushing = false;
 async function flushQueue(){
-  if (!CLOUD || flushing || !hasPending()) { setSync(); return; }
+  if (!CLOUD || !authSession || accessRole !== "editor" || flushing || !hasPending()) { setSync(); return; }
   flushing = true;
   try {
-    for (const id of Object.keys(pending.up)){
-      const r = recipes.find(x => x.id === id);
-      if (!r){ delete pending.up[id]; continue; }
-      await cloudUpsert(r);
-      delete pending.up[id];
+    // Delete first. Server tombstones make deletion win over stale offline edits.
+    for (const [id, op] of Object.entries(pending.deletes)){
+      await cloudService.applyChange({
+        id,
+        recipe: op.recipe || { id },
+        updatedAt: op.deletedAt,
+        deletedAt: op.deletedAt
+      });
+      delete pending.deletes[id];
     }
-    for (const id of Object.keys(pending.del)){
-      await cloudDelete(id);
-      delete pending.del[id];
+    for (const [id, op] of Object.entries(pending.upserts)){
+      await cloudService.applyChange({ id, recipe: op.recipe, updatedAt: op.updatedAt });
+      delete pending.upserts[id];
     }
     syncFailed = false;
   } catch(e){ syncFailed = true; }
-  saveQueue();
+  await saveQueue();
   flushing = false;
   setSync();
 }
@@ -490,47 +519,36 @@ async function flushQueue(){
 async function persist(r){
   cacheLocal();
   if (!CLOUD) return;
-  pending.up[r.id] = 1; delete pending.del[r.id]; saveQueue(); setSync();
+  pending = syncCore.queueUpsert(pending, r); await saveQueue(); setSync();
   await flushQueue();
   if (syncFailed) toast("ออฟไลน์ — จะ sync ให้อัตโนมัติเมื่อมีเน็ต");
 }
 async function removeRemote(id){
   cacheLocal();
   if (!CLOUD) return;
-  pending.del[id] = 1; delete pending.up[id]; saveQueue(); setSync();
+  pending = syncCore.queueDelete(pending, id, Date.now()); await saveQueue(); setSync();
   await flushQueue();
   if (syncFailed) toast("ออฟไลน์ — จะ sync ให้อัตโนมัติเมื่อมีเน็ต");
 }
 
-/* ---- Merge: รวมคลาวด์กับเครื่องนี้ ใครแก้ล่าสุดชนะ (ต่อสูตร) และไม่ทับของที่ยังไม่ได้อัป ---- */
 function mergeCloud(cloudRows){
-  // กันเหตุผิดปกติ: คลาวด์ตอบว่างแต่เครื่องเรามีสูตรอยู่ → อย่าลบตาม ให้ดันของเราขึ้นแทน
-  if (!cloudRows.length && recipes.length){
-    recipes.forEach(r => { pending.up[r.id] = 1; });
-    saveQueue();
-    flushQueue();
-    return;
-  }
-  const out = {};
-  cloudRows.forEach(r => { if (!pending.del[r.id]) out[r.id] = r; });
-  recipes.forEach(r => {
-    if (pending.del[r.id]) return;
-    if (pending.up[r.id]){ out[r.id] = r; return; }          // ของเรายังไม่ขึ้นคลาวด์ — เก็บไว้
-    const c = out[r.id];
-    if (c && ts(r.updatedAt) > ts(c.updatedAt)) out[r.id] = r; // เวอร์ชันเราใหม่กว่า
-  });
-  recipes = Object.values(out).sort((a,b) => ts(b.updatedAt) - ts(a.updatedAt));
+  const result = syncCore.reconcile(cloudRows, recipes, pending);
+  recipes = result.recipes;
+  pending = result.queue;
 }
 
 let refreshing = false;
 async function refresh(){
-  if (!CLOUD || refreshing) return;
+  if (!CLOUD || !authSession || !accessRole || refreshing) return;
   refreshing = true;
   try {
+    // Read tombstones before writes so an offline edit cannot revive a deleted ID.
+    mergeCloud(await cloudService.loadRows());
+    await saveQueue();
     await flushQueue();
-    mergeCloud(await cloudLoad());
+    if (!syncFailed) mergeCloud(await cloudService.loadRows());
     syncFailed = false;
-    cacheLocal(); renderList();
+    await saveQueue(); cacheLocal(); renderList();
   } catch(e){ syncFailed = true; }
   refreshing = false;
   setSync();
@@ -605,18 +623,8 @@ async function load(){
 
   if (CLOUD){
     await loadQueue();
-    // เปิด cloud ครั้งแรกบนเครื่องนี้: ดันสูตรทั้งหมดในเครื่องขึ้นคลาวด์ (กันโดนคลาวด์ว่างทับ)
-    const seeded = await store.get(SEEDED_KEY);
-    if (!seeded && recipes.length){
-      recipes.forEach(r => { pending.up[r.id] = 1; });
-      saveQueue();
-    }
-    await store.set(SEEDED_KEY, "1");
     try {
-      await flushQueue();
-      mergeCloud(await cloudLoad());
-      syncFailed = false;
-      cacheLocal();
+      if (authSession && accessRole) await refresh();
     } catch(e){
       syncFailed = true;
       toast("ออฟไลน์ — แสดงสูตรที่ sync ไว้ล่าสุด");
@@ -982,8 +990,8 @@ $("#fileInput").addEventListener("change", e=>{
       recipes = Object.values(byId).sort((a,b)=>ts(b.updatedAt)-ts(a.updatedAt));
       cacheLocal();
       if (CLOUD){
-        data.forEach(r=>{ if(r && r.id){ pending.up[r.id]=1; delete pending.del[r.id]; } });
-        saveQueue(); flushQueue();
+        data.forEach(r=>{ if(r && r.id) pending = syncCore.queueUpsert(pending, r); });
+        await saveQueue(); flushQueue();
       }
       renderList(); closeOverlay();
       toast(`กู้คืนแล้ว — รวม ${recipes.length} สูตร`, true);
@@ -1049,7 +1057,7 @@ async function seedSample(){
   const seeds = defaultRecipes();
   recipes = seeds.concat(recipes);
   cacheLocal();
-  if (CLOUD){ seeds.forEach(r=>{ pending.up[r.id]=1; }); saveQueue(); flushQueue(); }
+  if (CLOUD){ seeds.forEach(r=>{ pending = syncCore.queueUpsert(pending, r); }); await saveQueue(); flushQueue(); }
   renderList();
   toast("ใส่สูตรตัวอย่างแล้ว", true);
 }
@@ -1154,15 +1162,95 @@ $("#overlay").addEventListener("click", e=>{
   if (e.target.id==="overlay" || e.target.closest("[data-modal-close]")) closeOverlay();
 });
 
+/* ---------------- Account access ---------------- */
+function setAuthGate(open, message=""){
+  const gate = $("#authGate");
+  gate.dataset.open = open ? "1" : "0";
+  gate.setAttribute("aria-hidden", open ? "false" : "true");
+  $(".app").setAttribute("aria-hidden", open ? "true" : "false");
+  $(".app").inert = open;
+  $("#detailScreen").inert = open;
+  $("#editScreen").inert = open;
+  $("#authMessage").textContent = message;
+  if (open) setTimeout(()=>$("#authEmail").focus(), 50);
+}
+
+async function initializeAuth(){
+  if (!CLOUD) return true;
+  try {
+    authSession = await cloudService.session();
+    if (!authSession){ setAuthGate(true); return false; }
+
+    const roleKey = `catchup_recipe_role_${authSession.user.id}`;
+    try {
+      accessRole = await cloudService.access();
+      if (accessRole) localStorage.setItem(roleKey, accessRole);
+    } catch(error){
+      if (!navigator.onLine) accessRole = localStorage.getItem(roleKey);
+      else throw error;
+    }
+
+    if (!accessRole){
+      setAuthGate(true, "บัญชีนี้ยังไม่ได้รับอนุญาตให้ใช้เล่มสูตรครับ");
+      return false;
+    }
+    setAuthGate(false);
+    $("#btnAccount").hidden = false;
+    return true;
+  } catch(error){
+    setAuthGate(true, navigator.onLine
+      ? "ระบบสิทธิ์ยังไม่พร้อมใช้งาน กรุณาลองอีกครั้งภายหลังครับ"
+      : "เชื่อมต่ออินเทอร์เน็ตเพื่อเข้าสู่ระบบครั้งแรกครับ");
+    return false;
+  }
+}
+
+$("#authForm").addEventListener("submit", async event=>{
+  event.preventDefault();
+  const email = $("#authEmail").value.trim();
+  if (!email) return;
+  const button = $("#authSubmit");
+  button.disabled = true;
+  $("#authMessage").textContent = "กำลังส่งลิงก์…";
+  try {
+    const redirectTo = location.origin + location.pathname;
+    await cloudService.signIn(email, redirectTo);
+    $("#authMessage").textContent = "ส่งแล้วครับ เปิดลิงก์ในอีเมลนี้เพื่อเข้าสู่ระบบ";
+  } catch(error){
+    $("#authMessage").textContent = "ส่งลิงก์ไม่สำเร็จ กรุณาตรวจอีเมลแล้วลองอีกครั้งครับ";
+  }
+  button.disabled = false;
+});
+
+function openAccount(){
+  const email = authSession?.user?.email || "";
+  $("#modal").innerHTML = `
+    <h3>บัญชีของคุณ</h3>
+    <p>${esc(email)}</p>
+    <button class="btn btn-primary" id="btnSignOut">ออกจากระบบ</button>
+    <button class="btn btn-ghost" data-modal-close>ปิด</button>`;
+  $("#overlay").dataset.open="1";
+  $("#btnSignOut").onclick = async ()=>{
+    await cloudService.signOut();
+    authSession = null; accessRole = null; closeOverlay(); setAuthGate(true, "ออกจากระบบแล้วครับ");
+  };
+}
+
 /* ---------------- Boot ---------------- */
 async function boot(){
   await loadTheme();
+  if (CLOUD) await initializeAuth();
   await load();
   renderList();
-  // incoming shared recipe?
-  const m = location.hash.match(/[#&]r=([^&]+)/);
-  if (m){
-    try { const data = decodeRecipe(m[1]); openImport(data); }
+  // Stable internal deep link. Share links remain a separate import flow.
+  const direct = location.hash.match(/(?:^#|&)recipe=([^&]+)/);
+  const shared = location.hash.match(/(?:^#|&)r=([^&]+)/);
+  if (direct){
+    const id = decodeURIComponent(direct[1]);
+    if (recipes.some(recipe=>recipe.id===id)) openDetail(id);
+    else toast(navigator.onLine ? "ไม่พบสูตรนี้แล้วครับ" : "ยังไม่มีสูตรนี้ในข้อมูลออฟไลน์ครับ");
+  } else if (shared){
+    try { const data = decodeRecipe(shared[1]); openImport(data); }
     catch(e){ toast("ลิงก์สูตรอ่านไม่ได้"); history.replaceState(null,"",location.pathname); }
   }
   if (CLOUD){
@@ -1179,6 +1267,7 @@ async function boot(){
     window.addEventListener("online", refresh);
     window.addEventListener("offline", setSync);
     setInterval(()=>{ if(!document.hidden) refresh(); }, 15000);
+    $("#btnAccount").addEventListener("click", openAccount);
   }
 }
 boot();
