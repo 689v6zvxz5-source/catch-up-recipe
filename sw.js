@@ -1,4 +1,4 @@
-const CACHE = "catchup-recipes-v5";
+const CACHE = "catchup-recipes-v6";
 const ASSETS = [
   "./",
   "./index.html",
@@ -27,23 +27,17 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   // อย่ายุ่งกับ API ภายนอก (Supabase ฯลฯ) — ห้าม cache เด็ดขาด ไม่งั้นข้อมูล sync ค้าง
   if (new URL(req.url).origin !== location.origin) return;
-  // Network-first for the page so updates land; cache fallback for offline.
-  if (req.mode === "navigate") {
-    e.respondWith(
-      fetch(req).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put("./index.html", copy));
-        return res;
-      }).catch(() => caches.match("./index.html"))
-    );
-    return;
-  }
-  // Cache-first for everything else (fonts, icons).
+  // Network-first for EVERYTHING same-origin (page + app JS). Cache-first for app
+  // code once caused devices to run stale builds forever — that must never recur.
+  // The cache is a fallback for offline only.
+  const cacheKey = req.mode === "navigate" ? "./index.html" : req;
   e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy));
+    fetch(req).then(res => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(cacheKey, copy));
+      }
       return res;
-    }).catch(() => hit))
+    }).catch(() => caches.match(cacheKey))
   );
 });

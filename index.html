@@ -483,11 +483,35 @@ async function saveQueue(){ try { await store.set(QKEY, JSON.stringify(pending))
 function hasPending(){ return syncCore.hasPending(pending); }
 
 let syncFailed = false;
+let syncErrorKind = null; // "offline" | "auth" | "error"
 function setSync(){
   const dot = document.getElementById("syncDot");
   if (!dot) return;
   dot.dataset.s = (syncFailed || (typeof navigator.onLine === "boolean" && !navigator.onLine)) ? "off"
     : hasPending() ? "pending" : "ok";
+}
+
+function classifySyncError(error){
+  if (typeof navigator.onLine === "boolean" && !navigator.onLine) return "offline";
+  const code = String(error?.code || "");
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || "");
+  if (code === "42501" || status === 401 || status === 403 || /jwt|token|not.?authoriz|permission denied|refresh_token/i.test(message)) return "auth";
+  if (error instanceof TypeError) return "offline"; // เน็ตหลุดกลางทาง fetch จะโยน TypeError
+  return "error";
+}
+
+// อย่ากลืน error เป็น "ออฟไลน์" ทุกกรณี — ถ้าเป็นปัญหา session/สิทธิ์ ต้องพาไปเข้าสู่ระบบใหม่
+async function handleSyncError(error){
+  syncFailed = true;
+  syncErrorKind = classifySyncError(error);
+  if (syncErrorKind === "auth" && navigator.onLine) await initializeAuth();
+}
+
+function syncFailureToast(){
+  return syncErrorKind === "auth" ? "การเข้าสู่ระบบหมดอายุ — เข้าสู่ระบบใหม่เพื่อ sync ครับ"
+    : syncErrorKind === "error" ? "sync ไม่สำเร็จ — จะลองใหม่ให้อัตโนมัติครับ"
+      : "ออฟไลน์ — จะ sync ให้อัตโนมัติเมื่อมีเน็ต";
 }
 
 let flushing = false;
@@ -510,7 +534,8 @@ async function flushQueue(){
       delete pending.upserts[id];
     }
     syncFailed = false;
-  } catch(e){ syncFailed = true; }
+    syncErrorKind = null;
+  } catch(e){ await handleSyncError(e); }
   await saveQueue();
   flushing = false;
   setSync();
@@ -521,14 +546,14 @@ async function persist(r){
   if (!CLOUD) return;
   pending = syncCore.queueUpsert(pending, r); await saveQueue(); setSync();
   await flushQueue();
-  if (syncFailed) toast("ออฟไลน์ — จะ sync ให้อัตโนมัติเมื่อมีเน็ต");
+  if (syncFailed) toast(syncFailureToast());
 }
 async function removeRemote(id){
   cacheLocal();
   if (!CLOUD) return;
   pending = syncCore.queueDelete(pending, id, Date.now()); await saveQueue(); setSync();
   await flushQueue();
-  if (syncFailed) toast("ออฟไลน์ — จะ sync ให้อัตโนมัติเมื่อมีเน็ต");
+  if (syncFailed) toast(syncFailureToast());
 }
 
 function mergeCloud(cloudRows){
@@ -548,8 +573,9 @@ async function refresh(){
     await flushQueue();
     if (!syncFailed) mergeCloud(await cloudService.loadRows());
     syncFailed = false;
+    syncErrorKind = null;
     await saveQueue(); cacheLocal(); renderList();
-  } catch(e){ syncFailed = true; }
+  } catch(e){ await handleSyncError(e); }
   refreshing = false;
   setSync();
 }
@@ -626,8 +652,8 @@ async function load(){
     try {
       if (authSession && accessRole) await refresh();
     } catch(e){
-      syncFailed = true;
-      toast("ออฟไลน์ — แสดงสูตรที่ sync ไว้ล่าสุด");
+      await handleSyncError(e);
+      toast(syncErrorKind === "offline" ? "ออฟไลน์ — แสดงสูตรที่ sync ไว้ล่าสุด" : syncFailureToast());
     }
     setSync();
     return;
@@ -1260,7 +1286,7 @@ async function boot(){
       $("#btnSync").classList.add("spinning");
       await refresh();
       $("#btnSync").classList.remove("spinning");
-      toast(syncFailed ? "ยังออฟไลน์อยู่ — จะลองใหม่อัตโนมัติ" : "sync ล่าสุดแล้ว ✓", !syncFailed);
+      toast(syncFailed ? syncFailureToast() : "sync ล่าสุดแล้ว ✓", !syncFailed);
     });
     document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) refresh(); });
     window.addEventListener("focus", refresh);
@@ -1268,6 +1294,14 @@ async function boot(){
     window.addEventListener("offline", setSync);
     setInterval(()=>{ if(!document.hidden) refresh(); }, 15000);
     $("#btnAccount").addEventListener("click", openAccount);
+    // ตาม session ให้ทัน: กลับจาก magic link, token หมดอายุ, หรือออกจากระบบจากแท็บอื่น
+    cloudService.onAuthStateChange(async (event)=>{
+      if (event === "SIGNED_OUT"){ authSession = null; accessRole = null; setAuthGate(true); return; }
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED"){
+        const ready = await initializeAuth();
+        if (ready) refresh();
+      }
+    });
   }
 }
 boot();
@@ -1278,5 +1312,5 @@ if ("serviceWorker" in navigator){
 }
 </script>
 </body>
-<!-- catchup v3 — 2-person sync build -->
+<!-- catchup v4 — self-healing sync build (network-first sw, auth-aware errors) -->
 </html>
