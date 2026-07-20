@@ -347,6 +347,7 @@
   .auth-view{display:none;}
   .auth-gate[data-mode="loading"] .auth-view[data-view="loading"],
   .auth-gate[data-mode="email"] .auth-view[data-view="email"],
+  .auth-gate[data-mode="recovery"] .auth-view[data-view="recovery"],
   .auth-gate[data-mode="retry"] .auth-view[data-view="retry"],
   .auth-gate[data-mode="blocked"] .auth-view[data-view="blocked"]{display:block;}
   .auth-spinner{
@@ -444,6 +445,16 @@
       <input id="authPassword" type="password" autocomplete="current-password">
       <button class="btn btn-primary" id="authSubmit" type="submit">เข้าสู่ระบบ</button>
       <p class="auth-help" id="authMessage" role="status"></p>
+    </form>
+    <form class="auth-view" data-view="recovery" id="recoveryForm">
+      <h1>ตั้งรหัสผ่านใหม่</h1>
+      <p>ตั้งรหัสผ่านสำหรับเข้าเล่มสูตรครับ ครั้งต่อไปใช้อีเมลนี้กับรหัสผ่านที่ตั้งเพื่อเข้าได้เลย</p>
+      <label for="recoveryPw">รหัสผ่านใหม่</label>
+      <input id="recoveryPw" type="password" autocomplete="new-password">
+      <label for="recoveryPw2">ยืนยันรหัสผ่าน</label>
+      <input id="recoveryPw2" type="password" autocomplete="new-password">
+      <button class="btn btn-primary" id="recoverySubmit" type="submit">บันทึกรหัสผ่าน</button>
+      <p class="auth-help" id="recoveryMessage" role="status"></p>
     </form>
     <div class="auth-view" data-view="retry">
       <h1>กำลังเตรียมเล่มสูตร…</h1>
@@ -1240,6 +1251,7 @@ function setAuthView(mode, opts={}){
   $("#detailScreen").inert = open;
   $("#editScreen").inert = open;
   if (mode === "email"){ $("#authMessage").textContent = opts.message || ""; setTimeout(()=>$("#authEmail")?.focus(), 50); }
+  if (mode === "recovery"){ setTimeout(()=>$("#recoveryPw")?.focus(), 50); }
   if (mode === "retry" && opts.message) $("#authRetryMsg").textContent = opts.message;
   if (mode === "blocked" && opts.message) $("#authBlockedMsg").textContent = opts.message;
 }
@@ -1260,9 +1272,12 @@ async function refreshAccessRole(roleKey){
   } catch(e){ /* เช็คไม่ได้ชั่วคราว — ใช้ role เดิมต่อไป ไม่รบกวนผู้ใช้ */ }
 }
 
+let recoveryMode = false;
 let authInitInFlight = false;
 async function initializeAuth(){
   if (!CLOUD) { setAuthView("app"); return true; }
+  // ระหว่างตั้งรหัสผ่านใหม่ ห้าม fast-path (session + role cache) พาเข้าแอปข้ามหน้า recovery
+  if (recoveryMode) { setAuthView("recovery"); return false; }
   if (authInitInFlight) return false;
   authInitInFlight = true;
   try {
@@ -1333,6 +1348,29 @@ $("#authForm").addEventListener("submit", async event=>{
   button.disabled = false;
 });
 
+$("#recoveryForm").addEventListener("submit", async event=>{
+  event.preventDefault();
+  const pw = $("#recoveryPw").value;
+  const pw2 = $("#recoveryPw2").value;
+  if (pw.length < 8){ $("#recoveryMessage").textContent = "ตั้งรหัสผ่านอย่างน้อย 8 ตัวอักษรครับ"; return; }
+  if (pw !== pw2){ $("#recoveryMessage").textContent = "รหัสผ่านสองช่องไม่ตรงกันครับ"; return; }
+  const button = $("#recoverySubmit");
+  button.disabled = true;
+  $("#recoveryMessage").textContent = "กำลังบันทึกรหัสผ่าน…";
+  try {
+    await cloudService.updatePassword(pw);
+    recoveryMode = false;
+    $("#recoveryPw").value = ""; $("#recoveryPw2").value = "";
+    history.replaceState(null, "", location.pathname);  // ล้าง token ออกจาก URL กันเปิดซ้ำแล้วเข้าโหมด recovery อีก
+    setAuthView("loading");
+    const ready = await initializeAuth();
+    if (ready){ toast("ตั้งรหัสผ่านแล้วครับ ✓", true); refresh(); }
+  } catch(error){
+    $("#recoveryMessage").textContent = navigator.onLine ? "บันทึกรหัสผ่านไม่สำเร็จ กรุณาลองอีกครั้งครับ" : "ออฟไลน์อยู่ครับ ต่ออินเทอร์เน็ตแล้วลองใหม่";
+  }
+  button.disabled = false;
+});
+
 $("#authRetryBtn").addEventListener("click", async ()=>{
   const btn = $("#authRetryBtn");
   btn.disabled = true;
@@ -1369,7 +1407,23 @@ async function boot(){
   // เมื่อเสิร์ฟใต้ Catch Up OS (/recipe/) การเข้ามาที่นี่คือการนำทางเต็มหน้า จึงต้องมีทางกลับ
   if (location.pathname.startsWith("/recipe")) $("#btnBackToOS").hidden = false;
   await loadTheme();
-  if (CLOUD) await initializeAuth();
+  if (CLOUD){
+    // ลิงก์ตั้งรหัสผ่านพา token มากับ URL (#...type=recovery) — จับให้ทันก่อน initializeAuth
+    // จะได้ไม่ถูก fast-path พาเข้าแอปข้ามหน้าตั้งรหัส
+    if (/type=recovery/.test(location.hash) || /type=recovery/.test(location.search)){ recoveryMode = true; setAuthView("recovery"); }
+    // ฟัง event ก่อน initializeAuth เพื่อไม่พลาด PASSWORD_RECOVERY ที่ยิงตอน supabase ประมวลผล URL
+    cloudService.onAuthStateChange(async (event)=>{
+      if (event === "PASSWORD_RECOVERY"){ recoveryMode = true; setAuthView("recovery"); return; }
+      if (recoveryMode) return; // ระหว่างตั้งรหัสใหม่ อย่าเด้งไปไหน
+      if (event === "SIGNED_OUT"){ authSession = null; accessRole = null; setAuthView("email"); return; }
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED"){
+        if (accessRole && event === "TOKEN_REFRESHED") return;
+        const ready = await initializeAuth();
+        if (ready) refresh();
+      }
+    });
+    await initializeAuth();
+  }
   else setAuthView("app");
   await load();
   renderList();
@@ -1399,16 +1453,7 @@ async function boot(){
     window.addEventListener("offline", setSync);
     setInterval(()=>{ if(!document.hidden) refresh(); }, 15000);
     $("#btnAccount").addEventListener("click", openAccount);
-    // ตาม session ให้ทัน: กลับจาก magic link, token หมดอายุ, หรือออกจากระบบจากแท็บอื่น
-    cloudService.onAuthStateChange(async (event)=>{
-      if (event === "SIGNED_OUT"){ authSession = null; accessRole = null; setAuthView("email"); return; }
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED"){
-        // เข้าแอปอยู่แล้วไม่ต้องรีเซ็ตหน้า — แค่ token refresh เงียบ ๆ ก็ปล่อยผ่าน
-        if (accessRole && event === "TOKEN_REFRESHED") return;
-        const ready = await initializeAuth();
-        if (ready) refresh();
-      }
-    });
+    // (auth state listener ถูกลงทะเบียนไว้ก่อน initializeAuth แล้ว เพื่อจับ PASSWORD_RECOVERY ให้ทัน)
   }
 }
 boot();
@@ -1419,5 +1464,5 @@ if ("serviceWorker" in navigator){
 }
 </script>
 </body>
-<!-- catchup v7 — email + password auth, same-origin /recipe/, persistent per-device session -->
+<!-- catchup v8 — email + password with recovery: set-new-password screen (PASSWORD_RECOVERY) -->
 </html>

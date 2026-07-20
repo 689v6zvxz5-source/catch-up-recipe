@@ -9,9 +9,9 @@
 
     const client = library.createClient(url, key, {
       auth: {
-        persistSession: true,      // เก็บ session ไว้ใน localStorage ของเครื่องนี้
-        autoRefreshToken: true,    // ต่ออายุ token ให้เองเบื้องหลัง
-        detectSessionInUrl: false, // ไม่ใช้ magic link แล้ว จึงไม่ต้องอ่าน token จาก URL
+        persistSession: true,     // เก็บ session ไว้ใน localStorage ของเครื่องนี้
+        autoRefreshToken: true,   // ต่ออายุ token ให้เองเบื้องหลัง
+        detectSessionInUrl: true, // จำเป็นสำหรับลิงก์ตั้งรหัสผ่าน (recovery) — token อยู่ใน URL
         storageKey: "catchup_recipe_auth_v1",
       },
     });
@@ -31,6 +31,12 @@
 
     async function signOut() {
       const { error } = await client.auth.signOut();
+      if (error) throw error;
+    }
+
+    // ตั้งรหัสผ่านใหม่ให้บัญชีที่กำลังล็อกอินอยู่ (ใช้กับ recovery session หลังกดลิงก์ตั้งรหัส)
+    async function updatePassword(password) {
+      const { error } = await client.auth.updateUser({ password });
       if (error) throw error;
     }
 
@@ -65,6 +71,7 @@
       session,
       signIn,
       signOut,
+      updatePassword,
       access,
       loadRows,
       applyChange,
