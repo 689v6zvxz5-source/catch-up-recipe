@@ -8,7 +8,7 @@ function mockLibrary({ role = "editor", rows = [], failure = null } = {}) {
   const client = {
     auth: {
       getSession: async () => result({ session: { user: { id: "u1", email: "member@example.com" } } }),
-      signInWithOtp: async (args) => { calls.push(["otp", args]); return result(null); },
+      signInWithPassword: async (args) => { calls.push(["password", args]); return result(null); },
       signOut: async () => result(null),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
     },
@@ -41,12 +41,9 @@ test("Supabase errors are surfaced instead of becoming empty data", async () => 
   await assert.rejects(service.loadRows(), /permission denied/);
 });
 
-test("magic link keeps the requested redirect URL", async () => {
+test("password sign-in passes trimmed email and password through", async () => {
   const mock = mockLibrary();
   const service = createRecipeCloudService({ url: "https://example.test", key: "public", library: mock.library });
-  await service.signIn("member@example.com", "https://app.test/catch-up-recipe/");
-  assert.deepEqual(mock.calls[0], ["otp", {
-    email: "member@example.com",
-    options: { emailRedirectTo: "https://app.test/catch-up-recipe/", shouldCreateUser: true },
-  }]);
+  await service.signIn("  member@example.com  ", "s3cret");
+  assert.deepEqual(mock.calls[0], ["password", { email: "member@example.com", password: "s3cret" }]);
 });

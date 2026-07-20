@@ -9,9 +9,9 @@
 
     const client = library.createClient(url, key, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
+        persistSession: true,      // เก็บ session ไว้ใน localStorage ของเครื่องนี้
+        autoRefreshToken: true,    // ต่ออายุ token ให้เองเบื้องหลัง
+        detectSessionInUrl: false, // ไม่ใช้ magic link แล้ว จึงไม่ต้องอ่าน token จาก URL
         storageKey: "catchup_recipe_auth_v1",
       },
     });
@@ -22,21 +22,11 @@
       return data.session || null;
     }
 
-    // ส่งรหัสเข้าสู่ระบบทางอีเมล (อีเมลจะมีทั้งรหัส 6 หลักและลิงก์สำรอง)
-    // การกรอกรหัสทำให้ session ถูกสร้างใน "หน้าต่างที่ผู้ใช้เปิดอยู่" — สำคัญมากบนมือถือ
-    // เพราะการกดลิงก์จากแอปอีเมลจะเด้งไป Safari เสมอ ทำให้ session ไปอยู่คนละที่กับ PWA
-    async function signIn(email, redirectTo) {
-      const { error } = await client.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
-      });
+    // Email + Password: session ถูกสร้างในหน้าต่างที่ผู้ใช้ล็อกอินโดยตรง ไม่มี redirect ออก Safari
+    // จึงไม่มีปัญหา session ข้าม context บนมือถือ (คง Supabase Auth + RLS + allowlist 2 อีเมลเดิมไว้)
+    async function signIn(email, password) {
+      const { error } = await client.auth.signInWithPassword({ email: String(email).trim(), password });
       if (error) throw error;
-    }
-
-    async function verifyCode(email, token) {
-      const { data, error } = await client.auth.verifyOtp({ email, token: String(token).trim(), type: "email" });
-      if (error) throw error;
-      return data.session || null;
     }
 
     async function signOut() {
@@ -74,7 +64,6 @@
       client,
       session,
       signIn,
-      verifyCode,
       signOut,
       access,
       loadRows,
