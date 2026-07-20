@@ -343,6 +343,18 @@
     width:min(100%,420px);background:var(--surface);border:1px solid var(--line);
     border-radius:22px;padding:28px;box-shadow:var(--shadow);
   }
+  /* สลับมุมมองตามสถานะ auth — โชว์ช่องอีเมลเฉพาะตอน "ไม่มี session จริง ๆ" เท่านั้น */
+  .auth-view{display:none;}
+  .auth-gate[data-mode="loading"] .auth-view[data-view="loading"],
+  .auth-gate[data-mode="email"] .auth-view[data-view="email"],
+  .auth-gate[data-mode="retry"] .auth-view[data-view="retry"],
+  .auth-gate[data-mode="blocked"] .auth-view[data-view="blocked"]{display:block;}
+  .auth-spinner{
+    width:34px;height:34px;margin:22px auto 4px;border-radius:50%;
+    border:3px solid var(--line-strong);border-top-color:var(--ember);
+    animation:authSpin .8s linear infinite;
+  }
+  @keyframes authSpin{to{transform:rotate(360deg);}}
   .auth-card .mark{margin-bottom:18px;}
   .auth-card h1{font-family:var(--display);font-size:27px;font-weight:400;margin:0 0 8px;}
   .auth-card p{color:var(--muted);font-size:14px;margin:0 0 20px;}
@@ -412,16 +424,33 @@
 <input type="file" id="fileInput" accept="application/json,.json" class="visually-hidden">
 
 <div class="toast" id="toast"></div>
-<section class="auth-gate" id="authGate" data-open="0" aria-hidden="true">
-  <form class="auth-card" id="authForm">
+<section class="auth-gate" id="authGate" data-open="1" data-mode="loading" aria-hidden="false">
+  <div class="auth-card">
     <div class="mark" aria-hidden="true"></div>
-    <h1>เข้าสู่เล่มสูตร</h1>
-    <p>ใช้เฉพาะอีเมลที่ได้รับอนุญาต ระบบจะส่งลิงก์เข้าสู่ระบบให้ทางอีเมลครับ</p>
-    <label for="authEmail">อีเมล</label>
-    <input id="authEmail" type="email" autocomplete="email" inputmode="email" required>
-    <button class="btn btn-primary" id="authSubmit" type="submit">ส่งลิงก์เข้าสู่ระบบ</button>
-    <p class="auth-help" id="authMessage" role="status"></p>
-  </form>
+    <div class="auth-view" data-view="loading">
+      <h1>กำลังเปิดเล่มสูตร…</h1>
+      <p>กำลังเข้าสู่ระบบให้อัตโนมัติครับ</p>
+      <div class="auth-spinner" aria-hidden="true"></div>
+    </div>
+    <form class="auth-view" data-view="email" id="authForm">
+      <h1>เข้าสู่เล่มสูตร</h1>
+      <p>ใช้เฉพาะอีเมลที่ได้รับอนุญาต ระบบจะส่งลิงก์เข้าสู่ระบบให้ทางอีเมลครับ</p>
+      <label for="authEmail">อีเมล</label>
+      <input id="authEmail" type="email" autocomplete="email" inputmode="email">
+      <button class="btn btn-primary" id="authSubmit" type="submit">ส่งลิงก์เข้าสู่ระบบ</button>
+      <p class="auth-help" id="authMessage" role="status"></p>
+    </form>
+    <div class="auth-view" data-view="retry">
+      <h1>กำลังเตรียมเล่มสูตร…</h1>
+      <p id="authRetryMsg">เชื่อมต่อไม่ทันครับ กำลังลองใหม่ให้อัตโนมัติ</p>
+      <button class="btn btn-primary" id="authRetryBtn" type="button">ลองอีกครั้ง</button>
+    </div>
+    <div class="auth-view" data-view="blocked">
+      <h1>บัญชีนี้ยังไม่ได้รับอนุญาต</h1>
+      <p id="authBlockedMsg">ใช้เล่มสูตรได้เฉพาะบัญชีที่ได้รับอนุญาตครับ</p>
+      <button class="btn btn-ghost" id="authBlockedSignout" type="button">ออกจากระบบ</button>
+    </div>
+  </div>
 </section>
 <noscript>แอปนี้ต้องเปิดใช้งาน JavaScript</noscript>
 
@@ -1188,46 +1217,90 @@ $("#overlay").addEventListener("click", e=>{
   if (e.target.id==="overlay" || e.target.closest("[data-modal-close]")) closeOverlay();
 });
 
-/* ---------------- Account access ---------------- */
-function setAuthGate(open, message=""){
+/* ---------------- Account access ----------------
+ * สถานะของประตูเข้า: loading | email | retry | blocked | app
+ *  - "email" (ช่องกรอกอีเมล) แสดงเฉพาะเมื่อ "ไม่มี session จริง ๆ" เท่านั้น
+ *  - มี session แต่ยืนยันสิทธิ์ไม่ทัน → "retry" ไม่ใช่ "email" (จะได้ไม่ต้องขอลิงก์ใหม่)
+ *  - role ถูก cache ต่อเครื่อง เพื่อเข้าแอปได้ทันทีในการเปิดครั้งถัดไป (login ครั้งเดียวต่อเครื่อง)
+ *    ความปลอดภัยจริงอยู่ที่ RLS ฝั่ง Supabase — cache นี้แค่คุมการแสดงผล ไม่ได้ปลดล็อกข้อมูล
+ */
+function setAuthView(mode, opts={}){
+  const open = mode !== "app";
   const gate = $("#authGate");
   gate.dataset.open = open ? "1" : "0";
+  gate.dataset.mode = open ? mode : "";
   gate.setAttribute("aria-hidden", open ? "false" : "true");
   $(".app").setAttribute("aria-hidden", open ? "true" : "false");
   $(".app").inert = open;
   $("#detailScreen").inert = open;
   $("#editScreen").inert = open;
-  $("#authMessage").textContent = message;
-  if (open) setTimeout(()=>$("#authEmail").focus(), 50);
+  if (mode === "email"){ $("#authMessage").textContent = opts.message || ""; setTimeout(()=>$("#authEmail")?.focus(), 50); }
+  if (mode === "retry" && opts.message) $("#authRetryMsg").textContent = opts.message;
+  if (mode === "blocked" && opts.message) $("#authBlockedMsg").textContent = opts.message;
 }
 
-async function initializeAuth(){
-  if (!CLOUD) return true;
+async function enterAppWithRole(role, roleKey){
+  accessRole = role;
+  if (roleKey) localStorage.setItem(roleKey, role);
+  setAuthView("app");
+  $("#btnAccount").hidden = false;
+}
+
+// ยืนยัน role กับ server เบื้องหลัง หลังเข้าแอปด้วย cache ไปแล้ว — ถ้าสิทธิ์ถูกถอนจริงจึงค่อยบล็อก
+async function refreshAccessRole(roleKey){
   try {
-    authSession = await cloudService.session();
-    if (!authSession){ setAuthGate(true); return false; }
+    const role = await cloudService.access();
+    if (role){ accessRole = role; localStorage.setItem(roleKey, role); }
+    else { localStorage.removeItem(roleKey); setAuthView("blocked"); }
+  } catch(e){ /* เช็คไม่ได้ชั่วคราว — ใช้ role เดิมต่อไป ไม่รบกวนผู้ใช้ */ }
+}
 
-    const roleKey = `catchup_recipe_role_${authSession.user.id}`;
-    try {
-      accessRole = await cloudService.access();
-      if (accessRole) localStorage.setItem(roleKey, accessRole);
-    } catch(error){
-      if (!navigator.onLine) accessRole = localStorage.getItem(roleKey);
-      else throw error;
-    }
+let authInitInFlight = false;
+async function initializeAuth(){
+  if (!CLOUD) { setAuthView("app"); return true; }
+  if (authInitInFlight) return false;
+  authInitInFlight = true;
+  try {
+    // getSession รอให้ Supabase restore จาก localStorage + ประมวลผล token จาก URL (magic link) เสร็จก่อน
+    // จึงไม่ตัดสินว่า "ไม่มี session" เร็วเกินไป
+    let session = null;
+    try { session = await cloudService.session(); } catch(e){ session = null; }
 
-    if (!accessRole){
-      setAuthGate(true, "บัญชีนี้ยังไม่ได้รับอนุญาตให้ใช้เล่มสูตรครับ");
+    if (!session){
+      // ไม่มี session จริง ๆ → หน้าเข้าสู่ระบบ (ทางเดียวที่โชว์ช่องอีเมล)
+      setAuthView("email");
       return false;
     }
-    setAuthGate(false);
-    $("#btnAccount").hidden = false;
+
+    authSession = session;
+    const roleKey = `catchup_recipe_role_${session.user.id}`;
+    const cachedRole = localStorage.getItem(roleKey);
+
+    // เคยยืนยันบัญชีนี้ในเครื่องนี้แล้ว → เข้าแอปทันที แล้วค่อยยืนยันซ้ำเงียบ ๆ
+    if (cachedRole){
+      await enterAppWithRole(cachedRole, roleKey);
+      refreshAccessRole(roleKey);
+      return true;
+    }
+
+    // เครื่องนี้เพิ่งล็อกอินครั้งแรก → ต้องถาม server ว่ามีสิทธิ์ไหม
+    let role = null;
+    try { role = await cloudService.access(); }
+    catch(error){
+      // มี session แต่เช็คสิทธิ์ไม่สำเร็จชั่วคราว → ห้ามเด้งหน้าอีเมล ให้ retry แทน
+      setAuthView("retry", { message: navigator.onLine
+        ? "เชื่อมต่อไม่ทันครับ แตะ “ลองอีกครั้ง” ได้เลย"
+        : "ต่ออินเทอร์เน็ตครั้งเดียวเพื่อยืนยันบัญชีครับ หลังจากนั้นเปิดได้เลยไม่ต้องยืนยันอีก" });
+      return false;
+    }
+    if (!role){
+      setAuthView("blocked");   // server ตอบชัดว่าไม่มีสิทธิ์ (ไม่ใช่ error) → บล็อก ไม่ใช่ช่องอีเมล
+      return false;
+    }
+    await enterAppWithRole(role, roleKey);
     return true;
-  } catch(error){
-    setAuthGate(true, navigator.onLine
-      ? "ระบบสิทธิ์ยังไม่พร้อมใช้งาน กรุณาลองอีกครั้งภายหลังครับ"
-      : "เชื่อมต่ออินเทอร์เน็ตเพื่อเข้าสู่ระบบครั้งแรกครับ");
-    return false;
+  } finally {
+    authInitInFlight = false;
   }
 }
 
@@ -1248,6 +1321,21 @@ $("#authForm").addEventListener("submit", async event=>{
   button.disabled = false;
 });
 
+$("#authRetryBtn").addEventListener("click", async ()=>{
+  const btn = $("#authRetryBtn");
+  btn.disabled = true;
+  setAuthView("loading");
+  const ready = await initializeAuth();
+  btn.disabled = false;
+  if (ready) refresh();
+});
+
+$("#authBlockedSignout").addEventListener("click", async ()=>{
+  try { await cloudService.signOut(); } catch(e){}
+  authSession = null; accessRole = null;
+  setAuthView("email", { message: "ออกจากระบบแล้วครับ" });
+});
+
 function openAccount(){
   const email = authSession?.user?.email || "";
   $("#modal").innerHTML = `
@@ -1257,8 +1345,10 @@ function openAccount(){
     <button class="btn btn-ghost" data-modal-close>ปิด</button>`;
   $("#overlay").dataset.open="1";
   $("#btnSignOut").onclick = async ()=>{
+    const uid = authSession?.user?.id;
     await cloudService.signOut();
-    authSession = null; accessRole = null; closeOverlay(); setAuthGate(true, "ออกจากระบบแล้วครับ");
+    if (uid) localStorage.removeItem(`catchup_recipe_role_${uid}`);
+    authSession = null; accessRole = null; closeOverlay(); setAuthView("email", { message: "ออกจากระบบแล้วครับ" });
   };
 }
 
@@ -1266,6 +1356,7 @@ function openAccount(){
 async function boot(){
   await loadTheme();
   if (CLOUD) await initializeAuth();
+  else setAuthView("app");
   await load();
   renderList();
   // Stable internal deep link. Share links remain a separate import flow.
@@ -1296,8 +1387,10 @@ async function boot(){
     $("#btnAccount").addEventListener("click", openAccount);
     // ตาม session ให้ทัน: กลับจาก magic link, token หมดอายุ, หรือออกจากระบบจากแท็บอื่น
     cloudService.onAuthStateChange(async (event)=>{
-      if (event === "SIGNED_OUT"){ authSession = null; accessRole = null; setAuthGate(true); return; }
+      if (event === "SIGNED_OUT"){ authSession = null; accessRole = null; setAuthView("email"); return; }
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED"){
+        // เข้าแอปอยู่แล้วไม่ต้องรีเซ็ตหน้า — แค่ token refresh เงียบ ๆ ก็ปล่อยผ่าน
+        if (accessRole && event === "TOKEN_REFRESHED") return;
         const ready = await initializeAuth();
         if (ready) refresh();
       }
@@ -1312,5 +1405,5 @@ if ("serviceWorker" in navigator){
 }
 </script>
 </body>
-<!-- catchup v4 — self-healing sync build (network-first sw, auth-aware errors) -->
+<!-- catchup v5 — durable session: loading screen, cached role, retry-not-relogin -->
 </html>
