@@ -500,6 +500,9 @@ const SUPABASE_URL = "https://lteqlrqoaqtunspradrp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ImQ-xGOOidJZxdNRhUX8jw_H0Q9mHHt";
 // ▲▲▲ ปล่อยว่างทั้งคู่ = ใช้แบบ local เครื่องเดียว (เหมือนเดิม) ▲▲▲
 const CLOUD = !!(SUPABASE_URL && SUPABASE_KEY);
+// จับสัญญาณลิงก์ตั้งรหัสผ่านจาก URL ก่อนสร้าง Supabase client — เพราะ detectSessionInUrl
+// จะลบ hash ทิ้งหลังประมวลผลเสร็จ ถ้าเช็กทีหลังใน boot() จะไม่ทันในบางจังหวะ (เจอบน production)
+const isRecoveryUrl = /type=recovery/.test(location.hash) || /type=recovery/.test(location.search);
 const syncCore = window.CatchUpRecipeSync;
 const cloudService = CLOUD
   ? window.CatchUpRecipeCloud.createRecipeCloudService({ url: SUPABASE_URL, key: SUPABASE_KEY, library: window.supabase })
@@ -1408,9 +1411,9 @@ async function boot(){
   if (location.pathname.startsWith("/recipe")) $("#btnBackToOS").hidden = false;
   await loadTheme();
   if (CLOUD){
-    // ลิงก์ตั้งรหัสผ่านพา token มากับ URL (#...type=recovery) — จับให้ทันก่อน initializeAuth
-    // จะได้ไม่ถูก fast-path พาเข้าแอปข้ามหน้าตั้งรหัส
-    if (/type=recovery/.test(location.hash) || /type=recovery/.test(location.search)){ recoveryMode = true; setAuthView("recovery"); }
+    // ลิงก์ตั้งรหัสผ่านพา token มากับ URL — จับตั้งแต่ตอนโหลดสคริปต์ (isRecoveryUrl) ก่อน
+    // client จะลบ hash ทิ้ง เพื่อไม่ให้ fast-path พาเข้าแอปข้ามหน้าตั้งรหัส
+    if (isRecoveryUrl){ recoveryMode = true; setAuthView("recovery"); }
     // ฟัง event ก่อน initializeAuth เพื่อไม่พลาด PASSWORD_RECOVERY ที่ยิงตอน supabase ประมวลผล URL
     cloudService.onAuthStateChange(async (event)=>{
       if (event === "PASSWORD_RECOVERY"){ recoveryMode = true; setAuthView("recovery"); return; }
