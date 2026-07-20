@@ -347,8 +347,10 @@
   .auth-view{display:none;}
   .auth-gate[data-mode="loading"] .auth-view[data-view="loading"],
   .auth-gate[data-mode="email"] .auth-view[data-view="email"],
+  .auth-gate[data-mode="code"] .auth-view[data-view="code"],
   .auth-gate[data-mode="retry"] .auth-view[data-view="retry"],
   .auth-gate[data-mode="blocked"] .auth-view[data-view="blocked"]{display:block;}
+  #authCode{letter-spacing:.35em;font-size:22px;text-align:center;font-family:var(--mono);}
   .auth-spinner{
     width:34px;height:34px;margin:22px auto 4px;border-radius:50%;
     border:3px solid var(--line-strong);border-top-color:var(--ember);
@@ -373,6 +375,9 @@
 <div class="app">
   <header>
     <div class="brand">
+      <a class="icon-btn" id="btnBackToOS" href="/" aria-label="กลับหน้าหลัก" title="กลับหน้าหลัก" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </a>
       <div class="mark" aria-hidden="true"></div>
       <div>
         <div class="wordmark">สูตร</div>
@@ -434,11 +439,20 @@
     </div>
     <form class="auth-view" data-view="email" id="authForm">
       <h1>เข้าสู่เล่มสูตร</h1>
-      <p>ใช้เฉพาะอีเมลที่ได้รับอนุญาต ระบบจะส่งลิงก์เข้าสู่ระบบให้ทางอีเมลครับ</p>
+      <p>ใช้เฉพาะอีเมลที่ได้รับอนุญาต ระบบจะส่งรหัสเข้าสู่ระบบให้ทางอีเมลครับ</p>
       <label for="authEmail">อีเมล</label>
       <input id="authEmail" type="email" autocomplete="email" inputmode="email">
-      <button class="btn btn-primary" id="authSubmit" type="submit">ส่งลิงก์เข้าสู่ระบบ</button>
+      <button class="btn btn-primary" id="authSubmit" type="submit">ขอรหัสเข้าสู่ระบบ</button>
       <p class="auth-help" id="authMessage" role="status"></p>
+    </form>
+    <form class="auth-view" data-view="code" id="authCodeForm">
+      <h1>กรอกรหัสจากอีเมล</h1>
+      <p id="authCodeIntro">เปิดอีเมลแล้วนำรหัส 6 หลักมากรอกที่นี่ครับ — กรอกในหน้านี้เพื่อให้จำการเข้าสู่ระบบไว้ในแอป</p>
+      <label for="authCode">รหัส 6 หลัก</label>
+      <input id="authCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000">
+      <button class="btn btn-primary" id="authCodeSubmit" type="submit">เข้าสู่ระบบ</button>
+      <button class="btn btn-ghost" id="authCodeBack" type="button">ใช้อีเมลอื่น</button>
+      <p class="auth-help" id="authCodeMessage" role="status"></p>
     </form>
     <div class="auth-view" data-view="retry">
       <h1>กำลังเตรียมเล่มสูตร…</h1>
@@ -1235,6 +1249,7 @@ function setAuthView(mode, opts={}){
   $("#detailScreen").inert = open;
   $("#editScreen").inert = open;
   if (mode === "email"){ $("#authMessage").textContent = opts.message || ""; setTimeout(()=>$("#authEmail")?.focus(), 50); }
+  if (mode === "code"){ $("#authCodeMessage").textContent = opts.message || ""; setTimeout(()=>$("#authCode")?.focus(), 50); }
   if (mode === "retry" && opts.message) $("#authRetryMsg").textContent = opts.message;
   if (mode === "blocked" && opts.message) $("#authBlockedMsg").textContent = opts.message;
 }
@@ -1314,11 +1329,40 @@ $("#authForm").addEventListener("submit", async event=>{
   try {
     const redirectTo = location.origin + location.pathname;
     await cloudService.signIn(email, redirectTo);
-    $("#authMessage").textContent = "ส่งแล้วครับ เปิดลิงก์ในอีเมลนี้เพื่อเข้าสู่ระบบ";
+    pendingAuthEmail = email;
+    setAuthView("code");
+    $("#authCodeIntro").textContent = `ส่งรหัสไปที่ ${email} แล้วครับ นำรหัส 6 หลักมากรอกที่นี่`;
   } catch(error){
-    $("#authMessage").textContent = "ส่งลิงก์ไม่สำเร็จ กรุณาตรวจอีเมลแล้วลองอีกครั้งครับ";
+    $("#authMessage").textContent = "ส่งรหัสไม่สำเร็จ กรุณาตรวจอีเมลแล้วลองอีกครั้งครับ";
   }
   button.disabled = false;
+});
+
+let pendingAuthEmail = "";
+
+$("#authCodeForm").addEventListener("submit", async event=>{
+  event.preventDefault();
+  const code = $("#authCode").value.trim();
+  if (!code || !pendingAuthEmail) return;
+  const button = $("#authCodeSubmit");
+  button.disabled = true;
+  $("#authCodeMessage").textContent = "กำลังเข้าสู่ระบบ…";
+  try {
+    await cloudService.verifyCode(pendingAuthEmail, code);
+    // session ถูกสร้างในหน้าต่างนี้แล้ว — initializeAuth จะพาเข้าแอปและจำไว้ในเครื่องนี้
+    setAuthView("loading");
+    const ready = await initializeAuth();
+    if (ready) refresh();
+  } catch(error){
+    $("#authCodeMessage").textContent = "รหัสไม่ถูกต้องหรือหมดอายุแล้ว กรุณาขอรหัสใหม่ครับ";
+  }
+  button.disabled = false;
+});
+
+$("#authCodeBack").addEventListener("click", ()=>{
+  pendingAuthEmail = "";
+  $("#authCode").value = "";
+  setAuthView("email");
 });
 
 $("#authRetryBtn").addEventListener("click", async ()=>{
@@ -1354,6 +1398,8 @@ function openAccount(){
 
 /* ---------------- Boot ---------------- */
 async function boot(){
+  // เมื่อเสิร์ฟใต้ Catch Up OS (/recipe/) การเข้ามาที่นี่คือการนำทางเต็มหน้า จึงต้องมีทางกลับ
+  if (location.pathname.startsWith("/recipe")) $("#btnBackToOS").hidden = false;
   await loadTheme();
   if (CLOUD) await initializeAuth();
   else setAuthView("app");
@@ -1405,5 +1451,5 @@ if ("serviceWorker" in navigator){
 }
 </script>
 </body>
-<!-- catchup v5 — durable session: loading screen, cached role, retry-not-relogin -->
+<!-- catchup v6 — in-context auth: OTP code entry (no Safari hop), same-origin hosting -->
 </html>
